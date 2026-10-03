@@ -47,7 +47,7 @@ public class PlayerCombat : MonoBehaviour
             0.35f
             );
 
-        if (actor == null) { Debug.LogError("[PlayerCombat] actor Î´½ÓÏß", this); enabled = false; }
+        if (actor == null) { Debug.LogError("[PlayerCombat] actor æœªæŽ¥çº¿", this); enabled = false; }
 
     }
     // Start is called once before the first execution of Update after the MonoBehaviour is created
@@ -80,18 +80,18 @@ public class PlayerCombat : MonoBehaviour
         switch (next)
         {
             case CombatState.Idle:
-                Debug.Log("½øÈë Idle");
+                Debug.Log("è¿›å…¥ Idle");
                 break;
 
             case CombatState.Attack:
                 
-                Debug.Log("½øÈë¹¥»÷£º"+currentAttack.attackName);
+                Debug.Log("è¿›å…¥æ”»å‡»ï¼š"+currentAttack.attackName);
                 break;
 
             case CombatState.Recovery:
                 attackActive = false;
                 stateTimer = recoveryDuration;
-                Debug.Log("½øÈë Recovery");
+                Debug.Log("è¿›å…¥ Recovery");
                 break;
         }
     }
@@ -121,7 +121,7 @@ public class PlayerCombat : MonoBehaviour
         stateTimer = currentAttack.startup;
         attackActive = false;
         ChangeState(CombatState.Attack);
-        Debug.Log("¿ªÊ¼¹¥»÷£º" + currentAttack.attackName);
+        Debug.Log("å¼€å§‹æ”»å‡»ï¼š" + currentAttack.attackName);
         
             
         
@@ -137,7 +137,7 @@ public class PlayerCombat : MonoBehaviour
                 attackActive = true;
                 stateTimer = currentAttack.active;
                 attackHitbox.Activate();
-                Debug.Log("½øÈëActive");
+                Debug.Log("è¿›å…¥Active");
             }
             else
             {

@@ -18,7 +18,7 @@ public class AttackHitbox : MonoBehaviour
         {
             return;
         }
-        Debug.Log("¹¥»÷ÃüÖÐ£º"+ other.name);
+        Debug.Log("æ”»å‡»å‘½ä¸­ï¼š"+ other.name);
     }
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
