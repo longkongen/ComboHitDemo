@@ -2,10 +2,13 @@ using UnityEngine;
 
 public class AttackHitbox : MonoBehaviour
 {
-    public int damage = 10;
+    // 伤害由本次攻击的 AttackData 传入，这里不再保留“第二份伤害数据”
+    public float damage = 10f;
     private bool isActive = false;
-    public void Activate()
+
+    public void Activate(float attackDamage)
     {
+        damage = attackDamage;
         isActive = true;
     }
     public void Deactivate()
