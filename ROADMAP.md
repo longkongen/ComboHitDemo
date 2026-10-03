@@ -1,0 +1,110 @@
+# ComboHitDemo · 开发路线图
+
+> 微高速动作 ACT Demo（Unity 6 / C#）：**连招 · GP · 极限闪避 · 相杀拼刀 · QTE 处决**
+> 最后更新：2026-10-03（阶段 0 收尾）
+
+---
+
+## 0. 我们怎么协作
+
+1. **每阶段开始**：给出「目标 / 要动哪几个文件 / 必须先定的决策 / 验收标准 / 最容易踩的坑」。
+2. **实现期**：代码由我自己写；卡住、报错、或冒出新想法就提问，由你来区分这是实现细节问题、设计分歧、还是会破坏后面阶段的想法。
+3. **每阶段结束**：我描述现象，你 review 是否达标，再决定进下一阶段或回头补。
+4. **每阶段一次 commit**，随时可回退。
+
+## 1. 五条贯穿全程的纪律（现在就要守，后期改代价极大）
+
+1. **逻辑帧只能有一个时间基准**：自建 60fps 逻辑帧，或统一 `FixedUpdate`(50Hz)，全项目二选一。绝不能一部分走 `Update`（帧率相关）、一部分走 `FixedUpdate`——相杀会死在错帧上。
+2. **判定窗口按「帧」存，表现按「秒」播**。
+3. **状态只有一个来源**：由 `CombatActor` 持有；外部只能读 `State`，只能通过 `SetState` 写。
+4. **所有机制都通过"改写判定结果"实现**：GP / 极限闪避 / 相杀 / 一闪都必须走同一个 `CombatResolver` 的优先级仲裁，不各自写一套碰撞。
+5. **同帧优先级写死**：`QTE处决 > 相杀 > GP > 极限闪避 > 普通命中`。
+
+## 2. 机制 → 规则 → 落地文件
+
+| 机制 | 触发条件 | 判定窗口 | 结果 | 落点文件 |
+|---|---|---|---|---|
+| 连招 | 攻击键 + 输入缓冲 | 各段招式的取消窗口 | 链到下一段 `AttackData` | `CombatController` + `AttackData` |
+| GP（弹反） | 防御键 | 起手后 `0~0.12s` 主动帧 | 挡住 + 回耐 + `GuardPoint` | `GuardSystem` |
+| 闪避 | 闪避键 | 全身 i-frame 中段 | 位移 + `Dodge` | `DodgeSystem` |
+| 极限闪避 | 闪避启动后 `~0.15s` 内被命中 | 启动前段 | `PerfectDodge` + 回耐 | `DodgeSystem` |
+| 特殊攻击（气刃连段） | 特殊攻击键 + 消耗气刃 | 每段独立判定帧 | 气刃 1→2→3，**唯一可相杀的招式** | `CombatController` + `SpiritSystem` |
+| 相杀（拼刀） | 我方气刃判定帧 ∩ 敌方攻击判定帧 | 同一逻辑帧相交 | 双方 `Clash` → 我方开 QTE 窗口 | `ClashSystem` + `CombatResolver` |
+| QTE 处决 | 相杀成功 | 限时输入 | `Execute`，成功后回气刃 | `QTESystem` |
+| 一闪 | GP / 极限闪避成功后窗口内 | 成功后 `~0.3s` | `Issen` 高伤反击 + 回耐 | `IssenSystem` |
+| 耐力 | 闪避/GP/攻击消耗，GP+极限闪避回复 | — | 资源闸门 | `StaminaSystem` |
+| 韧性/破防 | 伤害削减 | — | `Stagger` → 处决机会 | `PostureSystem` |
+| 气刃 | 命中回气，气刃斩耗气 | 段位门槛 | 特殊攻击的弹药 | `SpiritSystem` |
+
+## 3. 阶段总表
+
+| 阶段 | 目标（做完能看到什么） | 验收标准 | 难度 | 状态 |
+|---|---|---|---|---|
+| **0. 地基收尾** | 工程干净、可回滚、可反复实验 | 能 Play、WASD 移动、按攻击键有反馈；已提交基线 | S | 🟡 收尾中 |
+| **1. 招式时间轴** | 攻击不再是硬编码秒数，而是「起手/判定/收招」可调 | 在 Inspector 改数值手感立刻变；能看到判定帧 | S–M | ⬜ |
+| **2. 判定层 + 木桩敌人** | 第一次真正「打中」并掉血 | 攻击能打掉木桩血；木桩挥刀能打到我 | M | ⬜ |
+| **3. 受击反馈与生死** | 挨打有硬直、击退、顿帧、能死 | 能打死木桩，也能被打死 | S–M | ⬜ |
+| **4. 连招系统** | 三段连起来且「乱按不串招」 | 连按顺畅出 1→2→3；停手回 Idle | M | ⬜ |
+| **5. 防御三件套** | 闪避 / 极限闪避 / GP 都能用且回耐 | 闪避能穿攻击；极限闪避有提示并回耐；GP 能弹开并回耐 | M–L | ⬜ |
+| **6. 一闪** | GP/极限闪避成功 → 反击 | GP 成功后按攻击键出一闪，直接打掉一大截血 | M | ⬜ |
+| **7. 气刃与特殊攻击** | 气刃资源 + 3 段气刃连段 + 段位 | 命中攒气、气刃连段打得出来、没气打不出 | M–L | ⬜ |
+| **8. 相杀 / 拼刀（核心）** | 气刃判定帧 ∩ 敌方攻击判定帧 → 双方对峙而非互掉血 | 敌人出招瞬间用气刃顶上去 → 触发 `Clash` 且本帧双方不掉血 | **L** | ⬜ |
+| **9. QTE 处决** | 相杀成功 → 限时输入 → 处决 → 回气刃 | 相杀后出提示，按对进 `Execute` 并回气，按错/超时双方后撤 | M | ⬜ |
+| **10. 韧性 / 破防** | 不依赖相杀的第二条处决路径 | 连续进攻能打出破防并处决 | M | ⬜ |
+| **11. 表现与手感打磨** | 从「能玩」到「看起来是微高速动作」 | 一整套连段流畅、有打击感 | L | ⬜ |
+| **12. 垂直切片** | 一个完整可给人试玩的循环 | 外人能上手打出全部机制 | M | ⬜ |
+
+> 顺序不可倒：阶段 2 的木桩敌人必须早做（GP/极限闪避/相杀全是"对敌人攻击做反应"）；阶段 8 是全项目技术难点，1、2、4、7 都是在为它铺地基。
+
+## 4. 当前进度（阶段 0）
+
+**已完成**
+- git 仓库初始化 + `.gitignore`（忽略 `Library/`、`Temp/`、`Logs/`、`obj/`、`.vs/`、`*.csproj`、`*.sln`）
+- 已推送到 GitHub 私有仓库：`https://github.com/longkongen/ComboHitDemo`
+- Player 存为 Prefab（`Assets/_Project/Prefabs/Player.prefab`），场景引用 Prefab 实例
+- 移除 Player 上重复的 `CapsuleCollider`（只保留 `CharacterController`）
+- 全部脚本统一为 **UTF-8（无 BOM）**
+- 战斗状态收敛到 `CombatActor`：`state` 私有化 + 只读 `State` + 唯一写入口 `SetState`
+
+**未完成**
+- 场景里 Player 实例带着一份失效的 `m_RemovedComponents` override（`fileID: 5602540682975598363` 在 Prefab 中已不存在）→ 在 Unity 内删除实例、从 Prefab 重拖一次即可
+
+**提前完成的部分**（属于阶段 1/2/4）
+- `AttackData` 数据类（name / damage / startup / active / recovery）
+- `PlayerCombat` 三段连招 + 输入缓冲 + 起手/判定/收招三阶段推进
+- `AttackHitbox`：`isActive` 门控 + 命中日志
+
+## 5. 待定决策（到对应阶段再定，届时附上每种选法的代价）
+
+| 决策 | 归属阶段 |
+|---|---|
+| 逻辑帧基准：自建 60fps 累加器 vs `FixedUpdate` 50Hz | 1 |
+| GP / 极限闪避成功后「回耐」与「一闪」的关系 | 6 |
+| 一闪的定位与消耗（是否消耗气刃） | 6–7 |
+| 相杀的成立条件（是否要求双方都处于攻击判定帧） | 8 |
+| QTE 处决的输入形式（单键 / 多段 / 方向+按键） | 9 |
+
+## 6. 已知技术债 / 待办清单
+
+| 项 | 归属阶段 |
+|---|---|
+| `PlayerCombat.attackDuration` / `recoveryDuration` 已成死字段（时间改由 `AttackData` 驱动） | 1 |
+| `attackActive` 一个字段承担两个语义（startup 结束 / 处于判定帧） | 1 |
+| `AttackHitbox` 缺 Layer/Tag 过滤（会打到自己与地面） | 2 |
+| `AttackHitbox` 缺"同一次挥击只结算一次"的去重 | 2 |
+| 命中未扣血（`AttackHitbox` 只有日志，还没有 `Hurtbox` 与结算） | 2 |
+| 输入仍直读 `Mouse.current`，未使用 `InputSystem_Actions` 的 `Attack` Action | 4 |
+| 无 Tags/Layers 定义（Player / Enemy / Hitbox / Hurtbox） | 2 |
+| 无 `.asmdef` 分层；`Scripts/Common`、`Scripts/Input` 仍为空目录 | 1–4 |
+| `TutorialInfo/`、`Readme.asset` 为模板残留 | 任意 |
+
+## 7. 变更记录
+
+- **2026-10-03 · 阶段 0**
+  - git 初始化 + `.gitignore` + 基线提交；推送到 GitHub 私有仓库
+  - `PlayerCombat.cs` / `AttackHitbox.cs` 由 GBK 转为 UTF-8（无 BOM）
+  - 修复：`CombatActor.state` 写权未收敛（改私有 + 只读 `State`）
+  - 修复：输入缓冲无过期机制（导致连招结束后自动多打一段）
+  - 修复：`UpdateRecovery` 中 `ChangeState(Attack)` 被调用两次
+  - 修复：`AttackData.damage` / `recovery` 未生效（伤害与收招时间改为由招式数据驱动）
+  - 补强：`Awake` 同时校验 `actor` 与 `attackHitbox`；`Mouse.current` 空引用保护；`ChangeState` 增加 `default` 兜底
