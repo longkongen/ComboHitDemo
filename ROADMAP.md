@@ -1,7 +1,7 @@
 # ComboHitDemo · 开发路线图
 
 > 微高速动作 ACT Demo（Unity 6 / C#）：**连招 · GP · 极限闪避 · 相杀拼刀 · QTE 处决**
-> 最后更新：2026-10-03（阶段 0 收尾）
+> 最后更新：2026-10-03（阶段 1 进行中）
 
 ---
 
@@ -40,8 +40,8 @@
 
 | 阶段 | 目标（做完能看到什么） | 验收标准 | 难度 | 状态 |
 |---|---|---|---|---|
-| **0. 地基收尾** | 工程干净、可回滚、可反复实验 | 能 Play、WASD 移动、按攻击键有反馈；已提交基线 | S | 🟡 收尾中 |
-| **1. 招式时间轴** | 攻击不再是硬编码秒数，而是「起手/判定/收招」可调 | 在 Inspector 改数值手感立刻变；能看到判定帧 | S–M | ⬜ |
+| **0. 地基收尾** | 工程干净、可回滚、可反复实验 | 能 Play、WASD 移动、按攻击键有反馈；已提交基线 | S | ✅ 完成 |
+| **1. 招式时间轴** | 攻击不再是硬编码秒数，而是「起手/判定/收招」可调 | 在 Inspector 改数值手感立刻变；能看到判定帧 | S–M | 🟡 进行中 |
 | **2. 判定层 + 木桩敌人** | 第一次真正「打中」并掉血 | 攻击能打掉木桩血；木桩挥刀能打到我 | M | ⬜ |
 | **3. 受击反馈与生死** | 挨打有硬直、击退、顿帧、能死 | 能打死木桩，也能被打死 | S–M | ⬜ |
 | **4. 连招系统** | 三段连起来且「乱按不串招」 | 连按顺畅出 1→2→3；停手回 Idle | M | ⬜ |
@@ -56,50 +56,59 @@
 
 > 顺序不可倒：阶段 2 的木桩敌人必须早做（GP/极限闪避/相杀全是"对敌人攻击做反应"）；阶段 8 是全项目技术难点，1、2、4、7 都是在为它铺地基。
 
-## 4. 当前进度（阶段 0）
+## 4. 当前进度
 
-**已完成**
+**阶段 0（已完成）**
 - git 仓库初始化 + `.gitignore`（忽略 `Library/`、`Temp/`、`Logs/`、`obj/`、`.vs/`、`*.csproj`、`*.sln`）
 - 已推送到 GitHub 私有仓库：`https://github.com/longkongen/ComboHitDemo`
 - Player 存为 Prefab（`Assets/_Project/Prefabs/Player.prefab`），场景引用 Prefab 实例
 - 移除 Player 上重复的 `CapsuleCollider`（只保留 `CharacterController`）
 - 全部脚本统一为 **UTF-8（无 BOM）**
 - 战斗状态收敛到 `CombatActor`：`state` 私有化 + 只读 `State` + 唯一写入口 `SetState`
+- 清理场景 Player 实例上失效的 `m_RemovedComponents` override
+- 修复：输入缓冲泄漏、重复状态迁移、`AttackData.damage` / `recovery` 未生效
 
-**未完成**
-- 场景里 Player 实例带着一份失效的 `m_RemovedComponents` override（`fileID: 5602540682975598363` 在 Prefab 中已不存在）→ 在 Unity 内删除实例、从 Prefab 重拖一次即可
-
-**提前完成的部分**（属于阶段 1/2/4）
-- `AttackData` 数据类（name / damage / startup / active / recovery）
-- `PlayerCombat` 三段连招 + 输入缓冲 + 起手/判定/收招三阶段推进
-- `AttackHitbox`：`isActive` 门控 + 命中日志
+**阶段 1（进行中）**
+- ✅ 决策：逻辑帧基准 = **自建 60fps 逻辑帧**（累加器 + 固定步长；判定粒度 16.7ms；可冻结、可复现、与显示刷新率无关）
+- ✅ 决策：招式数据 = **每招式一个 `ScriptableObject` 资产**，放 `Assets/_Project/Data/`
+- 本阶段原则：**只加马上会被消费的字段**（上一轮的 `damage` / `recovery` 死字段就是反面教材）
+- 第 1 步：`AttackData` → `ScriptableObject`；`Data/` 下建 3 个招式资产（帧为单位）；`PlayerCombat` 改为引用资产
+- 第 2 步：引入全局唯一时基 `CombatClock`（`Scripts/Common/`），带帧号事件与 spiral-of-death 保护
+- 第 3 步：`PlayerCombat` 帧化 —— `elapsedFrames` 作单一来源、阶段由帧数派生，清除战斗逻辑里的 `Time.deltaTime`
+- 第 4 步：调试 HUD（招式名 / 阶段 / 第几帧）
 
 ## 5. 待定决策（到对应阶段再定，届时附上每种选法的代价）
 
-| 决策 | 归属阶段 |
+| 决策 | 状态 / 归属阶段 |
 |---|---|
-| 逻辑帧基准：自建 60fps 累加器 vs `FixedUpdate` 50Hz | 1 |
-| GP / 极限闪避成功后「回耐」与「一闪」的关系 | 6 |
-| 一闪的定位与消耗（是否消耗气刃） | 6–7 |
-| 相杀的成立条件（是否要求双方都处于攻击判定帧） | 8 |
-| QTE 处决的输入形式（单键 / 多段 / 方向+按键） | 9 |
+| 逻辑帧基准：自建 60fps 累加器 vs `FixedUpdate` 50Hz | ✅ **已定：自建 60fps 逻辑帧**（阶段 1） |
+| 招式数据形态：`ScriptableObject` 资产 vs 代码内 `new` | ✅ **已定：每招式一个 SO 资产**（阶段 1） |
+| GP / 极限闪避成功后「回耐」与「一闪」的关系 | 阶段 6 |
+| 一闪的定位与消耗（是否消耗气刃） | 阶段 6–7 |
+| 相杀的成立条件（是否要求双方都处于攻击判定帧） | 阶段 8 |
+| QTE 处决的输入形式（单键 / 多段 / 方向+按键） | 阶段 9 |
 
 ## 6. 已知技术债 / 待办清单
 
 | 项 | 归属阶段 |
 |---|---|
-| `PlayerCombat.attackDuration` / `recoveryDuration` 已成死字段（时间改由 `AttackData` 驱动） | 1 |
-| `attackActive` 一个字段承担两个语义（startup 结束 / 处于判定帧） | 1 |
+| `PlayerCombat.attackDuration` / `recoveryDuration` 已成死字段（时间改由 `AttackData` 驱动） | 1（清理中） |
+| `attackActive` 一个字段承担两个语义（startup 结束 / 处于判定帧） | 1（改为帧数派生） |
 | `AttackHitbox` 缺 Layer/Tag 过滤（会打到自己与地面） | 2 |
 | `AttackHitbox` 缺"同一次挥击只结算一次"的去重 | 2 |
 | 命中未扣血（`AttackHitbox` 只有日志，还没有 `Hurtbox` 与结算） | 2 |
 | 输入仍直读 `Mouse.current`，未使用 `InputSystem_Actions` 的 `Attack` Action | 4 |
 | 无 Tags/Layers 定义（Player / Enemy / Hitbox / Hurtbox） | 2 |
 | 无 `.asmdef` 分层；`Scripts/Common`、`Scripts/Input` 仍为空目录 | 1–4 |
+| 项目内行尾混用（部分文件 CRLF、部分 LF），建议加 `.gitattributes` 统一 | 任意 |
 | `TutorialInfo/`、`Readme.asset` 为模板残留 | 任意 |
 
 ## 7. 变更记录
 
+- **2026-10-03 · 阶段 1 启动**
+  - 决策：逻辑帧基准 = **自建 60fps 逻辑帧**（累加器 + 固定步长）
+  - 决策：招式数据 = **每招式一个 `ScriptableObject` 资产**
+  - 原则：本阶段只加马上会被消费的字段；`cancelStartFrames`（阶段 4）、`canClash`（阶段 8）、`staminaCost`（阶段 5）等到对应阶段再加
 - **2026-10-03 · 阶段 0**
   - git 初始化 + `.gitignore` + 基线提交；推送到 GitHub 私有仓库
   - `PlayerCombat.cs` / `AttackHitbox.cs` 由 GBK 转为 UTF-8（无 BOM）
@@ -108,3 +117,4 @@
   - 修复：`UpdateRecovery` 中 `ChangeState(Attack)` 被调用两次
   - 修复：`AttackData.damage` / `recovery` 未生效（伤害与收招时间改为由招式数据驱动）
   - 补强：`Awake` 同时校验 `actor` 与 `attackHitbox`；`Mouse.current` 空引用保护；`ChangeState` 增加 `default` 兜底
+  - 清理场景 Player 实例上失效的 `m_RemovedComponents` override
