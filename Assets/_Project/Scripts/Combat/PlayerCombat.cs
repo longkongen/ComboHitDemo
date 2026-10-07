@@ -6,32 +6,31 @@ public class PlayerCombat : MonoBehaviour
     [SerializeField]
     private CombatActor actor;
 
-    public float attackDuration = 0.25f;
-    public float recoveryDuration = 0.20f;
-    private int comboStep = 0;
     private const int maxCombo = 3;
-    private bool attackBuffered = false;
-    private bool attackActive = false;
-    private float stateTimer;
 
     // 输入缓冲：按键先被记住，等取消窗口到来再消费；超时作废，
     // 否则很久以前的按键会在回到 Idle 的瞬间“复活”，打出一段玩家没按过的攻击。
+    // 单位是逻辑帧：30 帧 = 0.5 秒，可以直接和招式帧数比较。
     [SerializeField]
-    private float inputBufferDuration = 0.5f;
-    private float bufferTimer;
+    private int inputBufferFrames = 30;
+    private bool attackBuffered;
+    private int bufferFramesLeft;
+
+    // 招式内相对帧数：每 tick 恰好 +1，是本状态机唯一的计时来源
+    private int elapsedFrames;
+
+    private int comboStep;
+    private AttackData currentAttack;
 
     [SerializeField]
     private AttackData[] combo;
-    private AttackData currentAttack;
-
 
     [SerializeField]
     private AttackHitbox attackHitbox;
 
     private void Awake()
     {
-      
-        // 缺失引用属于"配置错误"，启动时就响亮地失败，别等玩家按键才抛 NullReference
+        // 缺失引用属于“配置错误”，启动时就响亮地失败，别等玩家按键才抛 NullReference
         if (actor == null)
         {
             Debug.LogError("[PlayerCombat] actor 未接线", this);
@@ -63,19 +62,26 @@ public class PlayerCombat : MonoBehaviour
         }
     }
 
-    // ===== 临时桥接：数据已改为「帧」，但计时仍是「秒」。第 3 步帧化后删除本函数 =====
-    private float FramesToSeconds(int frames) => frames / 60f;
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
+    // 纪律：渲染帧只负责采样输入，逻辑帧才推进状态机（CombatClock 的执行顺序是 order 1000）
+    private void OnEnable()
     {
-        
+        CombatClock.OnTick += OnCombatTick;
     }
 
-    // Update is called once per frame
-    void Update()
+    private void OnDisable()
+    {
+        CombatClock.OnTick -= OnCombatTick;      // 必须成对退订，否则一次 tick 会走两遍逻辑
+    }
+
+    private void Update()
     {
         CheckAttackInput();
+    }
+
+    private void OnCombatTick(int frame)
+    {
         UpdateInputBuffer();
+
         switch (actor.State)
         {
             case CombatState.Idle:
@@ -87,12 +93,14 @@ public class PlayerCombat : MonoBehaviour
             case CombatState.Recovery:
                 UpdateRecovery();
                 break;
-
         }
     }
+
     private void ChangeState(CombatState next)
     {
         actor.SetState(next);
+        elapsedFrames = 0;      // 唯一的计时复位点：每次迁移都从第 0 帧重新开始
+
         switch (next)
         {
             case CombatState.Idle:
@@ -100,106 +108,100 @@ public class PlayerCombat : MonoBehaviour
                 break;
 
             case CombatState.Attack:
-                Debug.Log("进入攻击："+currentAttack.attackName);
+                attackHitbox.Deactivate();      // 保险：进入攻击时判定体必须是关的
+                Debug.Log($"进入攻击：{currentAttack.attackName}（起手 {currentAttack.startupFrames} 帧）");
                 break;
 
             case CombatState.Recovery:
-                attackActive = false;
-                stateTimer = FramesToSeconds(currentAttack.recoveryFrames);
-                Debug.Log("进入 Recovery");
+                Debug.Log($"进入 Recovery（收招 {currentAttack.recoveryFrames} 帧）");
                 break;
 
             default:
-                // 兜底：未接线的状态不能沿用上一状态残留的计时，否则下一帧会立刻溢出跳走
-                stateTimer = 0f;
-                Debug.LogWarning($"[PlayerCombat] 未处理的状态迁移：{next}，stateTimer 已归零", this);
+                Debug.LogWarning($"[PlayerCombat] 未处理的状态迁移：{next}", this);
                 break;
         }
     }
+
     private void UpdateIdle()
     {
         if (attackBuffered)
         {
             attackBuffered = false;
-            bufferTimer = 0f;
+            bufferFramesLeft = 0;
             comboStep = 1;
             StartAttack();
         }
     }
+
     private void StartAttack()
     {
-       currentAttack = combo[comboStep -  1];
-        stateTimer = FramesToSeconds(currentAttack.startupFrames);
-        attackActive = false;
-        ChangeState(CombatState.Attack);
-        Debug.Log("开始攻击：" + currentAttack.attackName);
+        currentAttack = combo[comboStep - 1];
+        ChangeState(CombatState.Attack);        // 内部会把 elapsedFrames 归零
     }
+
     private void UpdateAttack()
     {
-        stateTimer -= Time.deltaTime;
+        elapsedFrames++;
 
-        if (stateTimer <= 0f)
+        // 跨进判定期的那一帧：开判定（帧化后可以精确用 == 定位某一帧，秒计时做不到）
+        if (elapsedFrames == currentAttack.ActiveStartFrames)
         {
-            if (!attackActive)
-            {
-                attackActive = true;
-                stateTimer = FramesToSeconds(currentAttack.activeFrames);
-                attackHitbox.Activate(currentAttack.damage);
-                Debug.Log("进入Active");
-            }
-            else
-            {
-                attackActive = false;
-                attackHitbox.Deactivate();
-                ChangeState(CombatState.Recovery);
-            }
+            attackHitbox.Activate(currentAttack.damage);
+            Debug.Log($"进入 Active（第 {elapsedFrames} 帧）");
+        }
+
+        // 判定期结束的那一帧：关判定并进收招
+        if (elapsedFrames >= currentAttack.ActiveEndFrames)
+        {
+            attackHitbox.Deactivate();
+            ChangeState(CombatState.Recovery);
         }
     }
+
     private void UpdateRecovery()
     {
-        stateTimer -= Time.deltaTime;
+        elapsedFrames++;
 
-        if (stateTimer <= 0f)
+        if (elapsedFrames >= currentAttack.recoveryFrames)
         {
             if (attackBuffered && comboStep < maxCombo)
             {
                 attackBuffered = false;
-                bufferTimer = 0f;
+                bufferFramesLeft = 0;
                 comboStep++;
-                // StartAttack 内部已经完成 ChangeState(Attack)，这里不能再调一次
+                // StartAttack 内部已完成 ChangeState(Attack)，这里不能重复调用
                 StartAttack();
             }
             else
             {
                 // 连招终止：必须清掉残留缓冲，否则回到 Idle 的瞬间会自动接出下一轮第一段
                 attackBuffered = false;
-                bufferTimer = 0f;
+                bufferFramesLeft = 0;
                 comboStep = 0;
                 ChangeState(CombatState.Idle);
             }
         }
     }
+
     private void CheckAttackInput()
     {
         if (Mouse.current == null) return;
         if (Mouse.current.leftButton.wasPressedThisFrame)
         {
             attackBuffered = true;
-            bufferTimer = inputBufferDuration;
+            bufferFramesLeft = inputBufferFrames;
         }
     }
+
     private void UpdateInputBuffer()
     {
         if (!attackBuffered) return;
 
-        bufferTimer -= Time.deltaTime;
-        if (bufferTimer <= 0f)
+        bufferFramesLeft--;
+        if (bufferFramesLeft <= 0)
         {
             attackBuffered = false;
-            bufferTimer = 0f;
+            bufferFramesLeft = 0;
         }
     }
-
-
-
 }
