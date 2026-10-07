@@ -1,19 +1,26 @@
-public class AttackData
+using UnityEngine;
+
+[CreateAssetMenu(fileName = "Attack_new",menuName = "ComboHit/AttackDate" )]
+public class AttackData : ScriptableObject
+
 {
-    public string attackName;
+    public string attackName = "Slash";
 
-    public float damage;
-    public float startup;
-    public float active;
-    public float recovery;
+    public float damage = 10f;
+    public int startupFrames = 6;
+    public int activeFrames = 5;
+    public int recoveryFrames = 11;
 
-    public AttackData(string name , float damage, float startup, float active,float recovery)
+    public int TotalFrames  => startupFrames + activeFrames + recoveryFrames;
+    public int ActiveStartFrames => startupFrames;
+    public int ActiveEndFrames => startupFrames + activeFrames;
+
+
+    private void OnValidate()
     {
-        attackName = name;
-        this.damage = damage;
-        this.startup = startup; 
-        this.active = active;   
-        this.recovery = recovery;   
+        startupFrames = Mathf.Max(1, startupFrames);
+        activeFrames = Mathf.Max(1, activeFrames);
+        recoveryFrames = Mathf.Max(1, recoveryFrames);
     }
 
 

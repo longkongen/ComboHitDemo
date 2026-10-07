@@ -20,38 +20,17 @@ public class PlayerCombat : MonoBehaviour
     private float inputBufferDuration = 0.5f;
     private float bufferTimer;
 
-    private AttackData attack1;
-    private AttackData attack2;
-    private AttackData attack3;
+    [SerializeField]
+    private AttackData[] combo;
     private AttackData currentAttack;
+
 
     [SerializeField]
     private AttackHitbox attackHitbox;
 
     private void Awake()
     {
-        attack1 = new AttackData(
-            "Slash 1",
-            10f,
-            0.10f,
-            0.08f,
-            0.18f
-            );
-        attack2 = new AttackData(
-            "Slash 2",
-            15f,
-            0.14f,
-            0.10f,
-            0.22f
-            );
-        attack3 = new AttackData(
-            "Slash 3",
-            25f,
-            0.20f,
-            0.15f,
-            0.35f
-            );
-
+      
         // 缺失引用属于"配置错误"，启动时就响亮地失败，别等玩家按键才抛 NullReference
         if (actor == null)
         {
@@ -63,7 +42,29 @@ public class PlayerCombat : MonoBehaviour
             Debug.LogError("[PlayerCombat] attackHitbox 未接线", this);
             enabled = false;
         }
+
+        // combo 是手拖引用，最容易漏；长度不足或含空槽位都在这里当场拦下
+        if (combo == null || combo.Length < maxCombo)
+        {
+            int count = (combo == null) ? 0 : combo.Length;
+            Debug.LogError($"[PlayerCombat] combo 至少需要 {maxCombo} 个招式资产，当前 {count} 个", this);
+            enabled = false;
+        }
+        else
+        {
+            for (int i = 0; i < maxCombo; i++)
+            {
+                if (combo[i] == null)
+                {
+                    Debug.LogError($"[PlayerCombat] combo[{i}] 未接线", this);
+                    enabled = false;
+                }
+            }
+        }
     }
+
+    // ===== 临时桥接：数据已改为「帧」，但计时仍是「秒」。第 3 步帧化后删除本函数 =====
+    private float FramesToSeconds(int frames) => frames / 60f;
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
@@ -104,7 +105,7 @@ public class PlayerCombat : MonoBehaviour
 
             case CombatState.Recovery:
                 attackActive = false;
-                stateTimer = currentAttack.recovery;
+                stateTimer = FramesToSeconds(currentAttack.recoveryFrames);
                 Debug.Log("进入 Recovery");
                 break;
 
@@ -127,18 +128,8 @@ public class PlayerCombat : MonoBehaviour
     }
     private void StartAttack()
     {
-        if ( comboStep == 1)
-        {
-            currentAttack = attack1;
-            
-        }else if ( comboStep == 2)
-        {
-            currentAttack = attack2;
-        }else if ( comboStep == 3)
-        {
-            currentAttack = attack3;
-        }
-        stateTimer = currentAttack.startup;
+       currentAttack = combo[comboStep -  1];
+        stateTimer = FramesToSeconds(currentAttack.startupFrames);
         attackActive = false;
         ChangeState(CombatState.Attack);
         Debug.Log("开始攻击：" + currentAttack.attackName);
@@ -152,7 +143,7 @@ public class PlayerCombat : MonoBehaviour
             if (!attackActive)
             {
                 attackActive = true;
-                stateTimer = currentAttack.active;
+                stateTimer = FramesToSeconds(currentAttack.activeFrames);
                 attackHitbox.Activate(currentAttack.damage);
                 Debug.Log("进入Active");
             }
