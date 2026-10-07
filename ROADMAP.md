@@ -1,7 +1,7 @@
 # ComboHitDemo · 开发路线图
 
 > 微高速动作 ACT Demo（Unity 6 / C#）：**连招 · GP · 极限闪避 · 相杀拼刀 · QTE 处决**
-> 最后更新：2026-10-03（阶段 1 进行中）
+> 最后更新：2026-10-07（阶段 1 第 1、2 步完成）
 
 ---
 
@@ -12,13 +12,18 @@
 3. **每阶段结束**：我描述现象，你 review 是否达标，再决定进下一阶段或回头补。
 4. **每阶段一次 commit**，随时可回退。
 
-## 1. 五条贯穿全程的纪律（现在就要守，后期改代价极大）
+## 1. 贯穿全程的纪律（现在就要守，后期改代价极大）
 
-1. **逻辑帧只能有一个时间基准**：自建 60fps 逻辑帧，或统一 `FixedUpdate`(50Hz)，全项目二选一。绝不能一部分走 `Update`（帧率相关）、一部分走 `FixedUpdate`——相杀会死在错帧上。
+1. **逻辑帧只能有一个时间基准**：✅ 已定 = **自建 60fps 逻辑帧**（`CombatClock`）。全项目只有它读 `Time.deltaTime` 推进逻辑，其他系统一律订阅 `CombatClock.OnTick`，**绝不自带计时器**。
+   **执行顺序约定**（靠 `[DefaultExecutionOrder]` 钉死，不靠运气）：
+   `输入采样（默认顺序的 Update）→ 逻辑 tick（CombatClock，order 1000）→ 表现（LateUpdate）`
 2. **判定窗口按「帧」存，表现按「秒」播**。
 3. **状态只有一个来源**：由 `CombatActor` 持有；外部只能读 `State`，只能通过 `SetState` 写。
 4. **所有机制都通过"改写判定结果"实现**：GP / 极限闪避 / 相杀 / 一闪都必须走同一个 `CombatResolver` 的优先级仲裁，不各自写一套碰撞。
 5. **同帧优先级写死**：`QTE处决 > 相杀 > GP > 极限闪避 > 普通命中`。
+6. **静态状态必须手动重置**：本工程禁用了 Domain Reload（`EnterPlayModeOptions = 3`），`static` 字段/事件不会在进 Play 时自动重置。任何带静态状态的类都必须写
+   `[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]` 重置方法，否则会出现"第二次 Play 动作快一倍 / `MissingReferenceException`"这类极难查的问题。
+7. **调试日志要按"单位时间统计"，不要按"每 N 帧打印一次"**：状态一旦停住，后者会每帧刷屏把现场冲掉（阶段 1 已经踩过这个坑，阶段 3 做顿帧时会再遇到）。
 
 ## 2. 机制 → 规则 → 落地文件
 
@@ -41,7 +46,7 @@
 | 阶段 | 目标（做完能看到什么） | 验收标准 | 难度 | 状态 |
 |---|---|---|---|---|
 | **0. 地基收尾** | 工程干净、可回滚、可反复实验 | 能 Play、WASD 移动、按攻击键有反馈；已提交基线 | S | ✅ 完成 |
-| **1. 招式时间轴** | 攻击不再是硬编码秒数，而是「起手/判定/收招」可调 | 在 Inspector 改数值手感立刻变；能看到判定帧 | S–M | 🟡 进行中 |
+| **1. 招式时间轴** | 攻击不再是硬编码秒数，而是「起手/判定/收招」可调 | 在 Inspector 改数值手感立刻变；能看到判定帧 | S–M | 🟡 进行中（第 1、2 步完成） |
 | **2. 判定层 + 木桩敌人** | 第一次真正「打中」并掉血 | 攻击能打掉木桩血；木桩挥刀能打到我 | M | ⬜ |
 | **3. 受击反馈与生死** | 挨打有硬直、击退、顿帧、能死 | 能打死木桩，也能被打死 | S–M | ⬜ |
 | **4. 连招系统** | 三段连起来且「乱按不串招」 | 连按顺畅出 1→2→3；停手回 Idle | M | ⬜ |
@@ -59,23 +64,17 @@
 ## 4. 当前进度
 
 **阶段 0（已完成）**
-- git 仓库初始化 + `.gitignore`（忽略 `Library/`、`Temp/`、`Logs/`、`obj/`、`.vs/`、`*.csproj`、`*.sln`）
-- 已推送到 GitHub 私有仓库：`https://github.com/longkongen/ComboHitDemo`
-- Player 存为 Prefab（`Assets/_Project/Prefabs/Player.prefab`），场景引用 Prefab 实例
-- 移除 Player 上重复的 `CapsuleCollider`（只保留 `CharacterController`）
-- 全部脚本统一为 **UTF-8（无 BOM）**
-- 战斗状态收敛到 `CombatActor`：`state` 私有化 + 只读 `State` + 唯一写入口 `SetState`
+- git 仓库初始化 + `.gitignore`；推送到 GitHub 私有仓库 `https://github.com/longkongen/ComboHitDemo`
+- Player 存为 Prefab；移除重复的 `CapsuleCollider`；全部脚本统一 UTF-8；战斗状态收敛到 `CombatActor`
 - 清理场景 Player 实例上失效的 `m_RemovedComponents` override
 - 修复：输入缓冲泄漏、重复状态迁移、`AttackData.damage` / `recovery` 未生效
 
 **阶段 1（进行中）**
-- ✅ 决策：逻辑帧基准 = **自建 60fps 逻辑帧**（累加器 + 固定步长；判定粒度 16.7ms；可冻结、可复现、与显示刷新率无关）
-- ✅ 决策：招式数据 = **每招式一个 `ScriptableObject` 资产**，放 `Assets/_Project/Data/`
-- 本阶段原则：**只加马上会被消费的字段**（上一轮的 `damage` / `recovery` 死字段就是反面教材）
-- 第 1 步：`AttackData` → `ScriptableObject`；`Data/` 下建 3 个招式资产（帧为单位）；`PlayerCombat` 改为引用资产
-- 第 2 步：引入全局唯一时基 `CombatClock`（`Scripts/Common/`），带帧号事件与 spiral-of-death 保护
-- 第 3 步：`PlayerCombat` 帧化 —— `elapsedFrames` 作单一来源、阶段由帧数派生，清除战斗逻辑里的 `Time.deltaTime`
-- 第 4 步：调试 HUD（招式名 / 阶段 / 第几帧）
+- ✅ 决策：逻辑帧基准 = 自建 60fps 逻辑帧；招式数据 = 每招式一个 `ScriptableObject` 资产
+- ✅ **第 1 步**：`AttackData` → `ScriptableObject`（帧为单位）；`Data/` 下 3 个招式资产（Slash1 `10/6/5/11`、Slash2 `15/8/6/13`、Slash3 `25/12/9/21`）；`PlayerCombat` 改为引用 `AttackData[] combo`；临时桥接 `FramesToSeconds` 让节奏与改动前一致
+- ✅ **第 2 步**：`CombatClock`（`Scripts/Common/`）—— 累加器 + 固定步长、补帧上限 5 防 spiral of death、`static event OnTick(int frame)` + `static Frame`、`[DefaultExecutionOrder(1000)]`、静态状态重置。实测显示 483fps 时逻辑帧稳定 60/s；场景新增 `System` 物体挂载它
+- ⬜ **第 3 步**：`PlayerCombat` 帧化 —— `elapsedFrames` 作单一来源、阶段由帧数派生、删掉 `FramesToSeconds` 桥接与死字段、改为订阅 `CombatClock.OnTick`
+- ⬜ **第 4 步**：调试 HUD（招式名 / 阶段 / 第几帧）
 
 ## 5. 待定决策（到对应阶段再定，届时附上每种选法的代价）
 
@@ -92,29 +91,30 @@
 
 | 项 | 归属阶段 |
 |---|---|
-| `PlayerCombat.attackDuration` / `recoveryDuration` 已成死字段（时间改由 `AttackData` 驱动） | 1（清理中） |
-| `attackActive` 一个字段承担两个语义（startup 结束 / 处于判定帧） | 1（改为帧数派生） |
+| `PlayerCombat.attackDuration` / `recoveryDuration` 已成死字段（时间改由 `AttackData` 驱动） | 1（第 3 步清理） |
+| `attackActive` 一个字段承担两个语义（startup 结束 / 处于判定帧） | 1（第 3 步改为帧数派生） |
+| `FramesToSeconds` 临时桥接（第 3 步删除，即为帧化完成的标志） | 1（第 3 步） |
 | `AttackHitbox` 缺 Layer/Tag 过滤（会打到自己与地面） | 2 |
 | `AttackHitbox` 缺"同一次挥击只结算一次"的去重 | 2 |
 | 命中未扣血（`AttackHitbox` 只有日志，还没有 `Hurtbox` 与结算） | 2 |
 | 输入仍直读 `Mouse.current`，未使用 `InputSystem_Actions` 的 `Attack` Action | 4 |
 | 无 Tags/Layers 定义（Player / Enemy / Hitbox / Hurtbox） | 2 |
-| 无 `.asmdef` 分层；`Scripts/Common`、`Scripts/Input` 仍为空目录 | 1–4 |
+| 无 `.asmdef` 分层；`Scripts/Input` 仍为空目录 | 1–4 |
 | 项目内行尾混用（部分文件 CRLF、部分 LF），建议加 `.gitattributes` 统一 | 任意 |
 | `TutorialInfo/`、`Readme.asset` 为模板残留 | 任意 |
 
 ## 7. 变更记录
 
+- **2026-10-07 · 阶段 1 第 1、2 步完成**
+  - 第 1 步：`AttackData` 改为 `ScriptableObject`（帧为单位、`OnValidate` 夹紧、派生属性）；`Data/` 下建 3 个招式资产并接入 Prefab 的 `combo` 数组；`PlayerCombat` 移除硬编码招式与 `new AttackData(...)`
+  - 第 2 步：新增 `CombatClock` 全局唯一时基并挂到场景 `System` 物体；确立「输入采样 → 逻辑 tick → 表现」三层执行顺序；记录"静态状态手动重置"与"日志按单位时间统计"两条纪律（均因本工程禁用 Domain Reload / 探针刷屏事件而来）
+  - 修复：`CombatClock.cs` 由 GBK 转 UTF-8；临时探针移除；`MaxTickPerFarame` 拼写修正
 - **2026-10-03 · 阶段 1 启动**
-  - 决策：逻辑帧基准 = **自建 60fps 逻辑帧**（累加器 + 固定步长）
-  - 决策：招式数据 = **每招式一个 `ScriptableObject` 资产**
-  - 原则：本阶段只加马上会被消费的字段；`cancelStartFrames`（阶段 4）、`canClash`（阶段 8）、`staminaCost`（阶段 5）等到对应阶段再加
+  - 决策：逻辑帧基准 = 自建 60fps 逻辑帧；招式数据 = 每招式一个 `ScriptableObject` 资产
+  - 原则：本阶段只加马上会被消费的字段
 - **2026-10-03 · 阶段 0**
   - git 初始化 + `.gitignore` + 基线提交；推送到 GitHub 私有仓库
   - `PlayerCombat.cs` / `AttackHitbox.cs` 由 GBK 转为 UTF-8（无 BOM）
-  - 修复：`CombatActor.state` 写权未收敛（改私有 + 只读 `State`）
-  - 修复：输入缓冲无过期机制（导致连招结束后自动多打一段）
-  - 修复：`UpdateRecovery` 中 `ChangeState(Attack)` 被调用两次
-  - 修复：`AttackData.damage` / `recovery` 未生效（伤害与收招时间改为由招式数据驱动）
-  - 补强：`Awake` 同时校验 `actor` 与 `attackHitbox`；`Mouse.current` 空引用保护；`ChangeState` 增加 `default` 兜底
+  - 修复：`CombatActor.state` 写权未收敛；输入缓冲无过期机制；`UpdateRecovery` 重复状态迁移；`AttackData.damage` / `recovery` 未生效
+  - 补强：`Awake` 校验关键引用；`Mouse.current` 空引用保护；`ChangeState` 增加 `default` 兜底
   - 清理场景 Player 实例上失效的 `m_RemovedComponents` override
