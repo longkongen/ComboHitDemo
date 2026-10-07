@@ -216,6 +216,11 @@ MonoBehaviour:
   actor: {fileID: 5862847208909735581}
   attackDuration: 0.25
   recoveryDuration: 0.2
+  inputBufferDuration: 0.5
+  combo:
+  - {fileID: 11400000, guid: c30488b10508a6f4da7ba15a5e4f7515, type: 2}
+  - {fileID: 11400000, guid: ed3e5e71b26c9b44593fe4fc24b11ddf, type: 2}
+  - {fileID: 11400000, guid: 793079184bc3cc3418a41cdc92bc367e, type: 2}
   attackHitbox: {fileID: 1853621454685411598}
 --- !u!114 &5862847208909735581
 MonoBehaviour:
