@@ -1,7 +1,7 @@
 # ComboHitDemo · 开发路线图
 
 > 微高速动作 ACT Demo（Unity 6 / C#）：**连招 · GP · 极限闪避 · 相杀拼刀 · QTE 处决**
-> 最后更新：2026-10-10（阶段 1 完成，阶段 2 启动）
+> 最后更新：2026-10-10（阶段 2 第 3 步完成；表现层决策：后置到阶段 11）
 
 ---
 
@@ -24,6 +24,7 @@
 6. **静态状态必须手动重置**：本工程禁用了 Domain Reload（`EnterPlayModeOptions = 3`），`static` 字段/事件不会在进 Play 时自动重置。任何带静态状态的类都必须写
    `[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]` 重置方法，否则会出现"第二次 Play 动作快一倍 / `MissingReferenceException`"这类极难查的问题。
 7. **调试日志要按"单位时间统计"，不要按"每 N 帧打印一次"**：状态一旦停住，后者会每帧刷屏把现场冲掉（阶段 1 已经踩过这个坑，阶段 3 做顿帧时会再遇到）。
+8. **表现层（模型 / 动画 / 特效）只能"读"状态与帧数，绝不允许反向驱动逻辑**：动画播放位置由 `elapsedFrames / 该状态总帧数` 算出的归一化时间驱动，改帧数动画自动跟着变；`Animation Event` 只准用于表现（脚步音、特效、拖尾），**永远不准用来开判定窗口** —— 判定窗口的唯一来源永远是 `AttackData` 的帧数。
 
 ## 2. 机制 → 规则 → 落地文件
 
@@ -56,7 +57,7 @@
 | **8. 相杀 / 拼刀（核心）** | 气刃判定帧 ∩ 敌方攻击判定帧 → 双方对峙而非互掉血 | 敌人出招瞬间用气刃顶上去 → 触发 `Clash` 且本帧双方不掉血 | **L** | ⬜ |
 | **9. QTE 处决** | 相杀成功 → 限时输入 → 处决 → 回气刃 | 相杀后出提示，按对进 `Execute` 并回气，按错/超时双方后撤 | M | ⬜ |
 | **10. 韧性 / 破防** | 不依赖相杀的第二条处决路径 | 连续进攻能打出破防并处决 | M | ⬜ |
-| **11. 表现与手感打磨** | 从「能玩」到「看起来是微高速动作」 | 一整套连段流畅、有打击感 | L | ⬜ |
+| **11. 表现与手感打磨** | 从「能玩」到「看起来是微高速动作」（模型 / 动画 / 特效 / 震屏在此进入；此时帧数表已冻结，动画只需对表一次） | 一整套连段流畅、有打击感 | L | ⬜ |
 | **12. 垂直切片** | 一个完整可给人试玩的循环 | 外人能上手打出全部机制 | M | ⬜ |
 
 > 顺序不可倒：阶段 2 的木桩敌人必须早做（GP/极限闪避/相杀全是"对敌人攻击做反应"）；阶段 8 是全项目技术难点，1、2、4、7 都是在为它铺地基。
@@ -79,11 +80,12 @@
 
 **阶段 2（进行中）**
 - ✅ 决策：命中检测 = 每逻辑帧主动 `Physics.OverlapBox` 查询；木桩 = 会规律挥刀的假人（与玩家共用 `AttackData` 与判定帧开关）
-- ⬜ 第 1 步：建 Layer `Player` / `Enemy` / `Hitbox` / `Hurtbox`
-- ⬜ 第 2 步：`Hurtbox` + `CombatActor.TakeDamage` / `Hp` / `IsDead`
-- ⬜ 第 3 步：`CombatResolver`（唯一仲裁口）+ 改写 `AttackHitbox`（主动查询 + 去重 + 过滤）
-- ⬜ 第 4 步：`TrainingDummy` Prefab + `DummyCombat`
+- ✅ 第 1 步：User Layer `Player`(8) / `Enemy`(9) / `Hitbox`(10) / `Hurtbox`(11) 建好并归位（两个 Prefab + 场景实例）
+- ✅ 第 2 步：`Hurtbox`（`owner` + `Awake` 校验）+ `CombatActor.TakeDamage` / `Hp` / `IsDead`
+- ✅ 第 3 步：`CombatResolver`（唯一仲裁口）+ `AttackHitbox` 改为主动查询（`OverlapBoxNonAlloc` + `HashSet` 去重 + `Owner` 自伤过滤 + `SyncTransforms`）；实测一套连招伤害 10/15/25 全对，一次挥击只结算一次
+- 🟡 第 4 步：木桩 Prefab（沿用了 `Enemy` 这个名字）+ `DummyCombat` —— 按固定节拍挥刀，与玩家共用 `AttackData` / 判定帧 / 仲裁口
 - ⬜ 第 5 步：HUD 显示双方 HP，验收
+- ✅ 决策：表现层后置 —— 阶段 2–10 只做判定与规则，当前仅加「零资源反馈」（`AttackHitbox` / `Hurtbox` 的 `OnDrawGizmos` 调试可视化 + 朝向指示物），模型/动画留到阶段 11
 
 ## 5. 待定决策（到对应阶段再定，届时附上每种选法的代价）
 
@@ -93,6 +95,7 @@
 | 招式数据形态：`ScriptableObject` 资产 vs 代码内 `new` | ✅ **已定：每招式一个 SO 资产**（阶段 1） |
 | 命中检测方式：物理 trigger 事件 vs 每逻辑帧主动 `OverlapBox` 查询 | ✅ **已定：每逻辑帧主动 `OverlapBox` 查询**（阶段 2）—— 判定必须发生在自己的时钟里，否则阶段 8「同一逻辑帧相交」无从谈起 |
 | 木桩敌人形态：纯静止靶子 vs 会规律挥刀的假人 | ✅ **已定：会规律挥刀的假人**（阶段 2）—— 与玩家共用 `AttackData` 与判定帧开关，阶段 5/6/8 直接在它身上试 |
+| 表现层引入时机：边做机制边接模型/动画 vs 逻辑优先、表现后置 | ✅ **已定：逻辑优先，表现后置到阶段 11**（阶段 2）—— 帧数表在阶段 5/6/8 还会变动，现在做动画对表等于白干；当前只加「零资源反馈」（Gizmos 判定可视化 + 朝向指示物） |
 | GP / 极限闪避成功后「回耐」与「一闪」的关系 | 阶段 6 |
 | 一闪的定位与消耗（是否消耗气刃） | 阶段 6–7 |
 | 相杀的成立条件（是否要求双方都处于攻击判定帧） | 阶段 8 |
@@ -105,19 +108,28 @@
 | `PlayerCombat.attackDuration` / `recoveryDuration` 已成死字段（时间改由 `AttackData` 驱动） | ✅ 已解决（阶段 1 第 3 步） |
 | `attackActive` 一个字段承担两个语义（startup 结束 / 处于判定帧） | ✅ 已解决（阶段 1 第 3 步，改由帧数派生） |
 | `FramesToSeconds` 临时桥接（第 3 步删除，即为帧化完成的标志） | ✅ 已解决（阶段 1 第 3 步） |
-| `AttackHitbox.damage` 仍是 `public` 字段（应改 `private` + 只读属性） | 2 |
+| `AttackHitbox.damage` 仍是 `public` 字段（应改 `private` + 只读属性） | ✅ 已解决（阶段 2，已改为 `private float damage`） |
 | `PlayerMotor` 仍在 `Update` 里读输入并位移，未走逻辑帧 | 2–3 |
-| `AttackHitbox` 缺 Layer/Tag 过滤（会打到自己与地面） | 2 |
-| `AttackHitbox` 缺"同一次挥击只结算一次"的去重 | 2 |
-| 命中未扣血（`AttackHitbox` 只有日志，还没有 `Hurtbox` 与结算） | 2 |
-| 输入仍直读 `Mouse.current`，未使用 `InputSystem_Actions` 的 `Attack` Action | 4 |
-| 无 Tags/Layers 定义（Player / Enemy / Hitbox / Hurtbox） | 2 |
+| `AttackHitbox` 缺 Layer/Tag 过滤（会打到自己与地面） | ✅ 已解决（阶段 2 第 3 步：`LayerMask.GetMask("Hurtbox")` + `Owner` 身份过滤） |
+| `AttackHitbox` 缺"同一次挥击只结算一次"的去重 | ✅ 已解决（阶段 2 第 3 步：实例级 `HashSet<Hurtbox>`，`Activate` 时清空） |
+| 命中未扣血（`AttackHitbox` 只有日志，还没有 `Hurtbox` 与结算） | ✅ 已解决（阶段 2 第 3 步：经 `CombatResolver` → `CombatActor.TakeDamage`） |
+| 无 Tags/Layers 定义（Player / Enemy / Hitbox / Hurtbox） | ✅ 已解决（阶段 2 第 1 步） |
+| 「攻击」输入仍直读 `Mouse.current`，未使用 `InputSystem_Actions` 的 `Attack` Action | 4 |
+| `AttackData.cs` 的 `menuName` 拼写为 `ComboHit/AttackDate` | 任意 |
+| 木桩 Prefab 沿用 `Enemy` 命名，与规划里的 `TrainingDummy` 不一致 | 4 |
 | 无 `.asmdef` 分层；`Scripts/Input` 仍为空目录 | 1–4 |
 | 项目内行尾混用（部分文件 CRLF、部分 LF），建议加 `.gitattributes` 统一 | 任意 |
 | `TutorialInfo/`、`Readme.asset` 为模板残留 | 任意 |
 
 ## 7. 变更记录
 
+- **2026-10-10 · 阶段 2 第 1–3 步完成 + 表现层决策**
+  - 第 1 步：建立 User Layer `Player`(8) / `Enemy`(9) / `Hitbox`(10) / `Hurtbox`(11)（代码里一律 `LayerMask.GetMask(...)`，不硬编码层号）
+  - 第 2 步：`Hurtbox`（`owner` + `Awake` 校验，未接线时自我 disable）；`CombatActor` 增加 `hp` / `Hp` / `IsDead` / `TakeDamage`
+  - 第 3 步：`CombatResolver.ResolveHit` 成为唯一仲裁口（阶段 5/6/8 的拦截都插在这里）；`AttackHitbox` 从 `OnTriggerEnter` 改为每逻辑帧主动 `Physics.OverlapBoxNonAlloc` 查询，含 `Physics.SyncTransforms()`、`HashSet` 去重、`Owner` 自伤过滤、`Activate()` 内立即查一次（规避"委托调用顺序 = 订阅顺序"导致的判定帧第 0 帧漏查）
+  - 踩坑：`LayerMask.GetMask` 写在字段初始化器/静态构造里 → `UnityException: NameToLayer is not allowed...` + `TypeInitializationException`（整个类型废掉，需重编译恢复）。教训：凡"要查引擎内部表"的 API 只能放在 `Awake`/`Start`
+  - **决策：表现层后置** —— 当前无模型无动画（Player 胶囊 / Enemy 圆柱），判定链路只依赖 Collider + Layer + 帧数，与美术零耦合；模型/动画/特效统一留到阶段 11。当前只加零资源调试可视化：`AttackHitbox` / `Hurtbox` 的 `OnDrawGizmos`（黄=待命、红=判定帧开着；owner 未接线时画洋红）
+  - 纪律 #8 追加：表现层只能读状态与帧数，`Animation Event` 不准开判定窗口
 - **2026-10-10 · 阶段 1 完成，阶段 2 启动**
   - 第 3 步：`PlayerCombat` 帧化 —— `elapsedFrames` 单一计时来源、阶段由 `AttackData` 帧数派生、订阅 `CombatClock.OnTick`（`Update` 只做输入采样）、输入缓冲改帧；删除 `FramesToSeconds` 桥接
   - 第 4 步：新增 `CombatDebugHUD` 并挂到场景 `System` 物体；`PlayerCombat` 暴露只读调试属性
