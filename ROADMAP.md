@@ -78,8 +78,12 @@
 - 排查记录：HUD 恒显示 Idle 是因为 `player` 字段引用了 **Project 窗口的 Prefab 资产**（不再运行的模板，字段永远是初始值）；现已在 HUD 内加自诊断（`!scene.IsValid()` → "Prefab ASSET" 提示）
 
 **阶段 2（进行中）**
-- ⬜ 待定决策：命中检测方式、木桩敌人形态（见第 5 节）
-- ⬜ 目标：打中木桩掉血、木桩挥刀打到我；建立 `Hurtbox` + `CombatResolver` 判定层
+- ✅ 决策：命中检测 = 每逻辑帧主动 `Physics.OverlapBox` 查询；木桩 = 会规律挥刀的假人（与玩家共用 `AttackData` 与判定帧开关）
+- ⬜ 第 1 步：建 Layer `Player` / `Enemy` / `Hitbox` / `Hurtbox`
+- ⬜ 第 2 步：`Hurtbox` + `CombatActor.TakeDamage` / `Hp` / `IsDead`
+- ⬜ 第 3 步：`CombatResolver`（唯一仲裁口）+ 改写 `AttackHitbox`（主动查询 + 去重 + 过滤）
+- ⬜ 第 4 步：`TrainingDummy` Prefab + `DummyCombat`
+- ⬜ 第 5 步：HUD 显示双方 HP，验收
 
 ## 5. 待定决策（到对应阶段再定，届时附上每种选法的代价）
 
@@ -87,8 +91,8 @@
 |---|---|
 | 逻辑帧基准：自建 60fps 累加器 vs `FixedUpdate` 50Hz | ✅ **已定：自建 60fps 逻辑帧**（阶段 1） |
 | 招式数据形态：`ScriptableObject` 资产 vs 代码内 `new` | ✅ **已定：每招式一个 SO 资产**（阶段 1） |
-| 命中检测方式：物理 trigger 事件 vs 每逻辑帧主动 `OverlapBox` 查询 | 🟡 待定（阶段 2） |
-| 木桩敌人形态：纯静止靶子 vs 会规律挥刀的假人 | 🟡 待定（阶段 2） |
+| 命中检测方式：物理 trigger 事件 vs 每逻辑帧主动 `OverlapBox` 查询 | ✅ **已定：每逻辑帧主动 `OverlapBox` 查询**（阶段 2）—— 判定必须发生在自己的时钟里，否则阶段 8「同一逻辑帧相交」无从谈起 |
+| 木桩敌人形态：纯静止靶子 vs 会规律挥刀的假人 | ✅ **已定：会规律挥刀的假人**（阶段 2）—— 与玩家共用 `AttackData` 与判定帧开关，阶段 5/6/8 直接在它身上试 |
 | GP / 极限闪避成功后「回耐」与「一闪」的关系 | 阶段 6 |
 | 一闪的定位与消耗（是否消耗气刃） | 阶段 6–7 |
 | 相杀的成立条件（是否要求双方都处于攻击判定帧） | 阶段 8 |
