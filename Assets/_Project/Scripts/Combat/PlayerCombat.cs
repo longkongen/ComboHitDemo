@@ -16,7 +16,8 @@ public class PlayerCombat : MonoBehaviour
     private bool attackBuffered;
     private int bufferFramesLeft;
 
-    // 招式内相对帧数：每 tick 恰好 +1，是本状态机唯一的计时来源
+    // 当前状态内的相对帧数：每 tick 恰好 +1，是本状态机唯一的计时来源
+    // 注意它统计的是“进入当前状态之后过了几帧”，ChangeState 时归零
     private int elapsedFrames;
 
     private int comboStep;
@@ -61,6 +62,11 @@ public class PlayerCombat : MonoBehaviour
             }
         }
     }
+
+    // ===== 调试用只读快照：不参与战斗逻辑，只给 CombatDebugHUD 看 =====
+    public CombatState State => (actor != null) ? actor.State : CombatState.Idle;
+    public AttackData CurrentAttack => currentAttack;
+    public int ElapsedFrames => elapsedFrames;
 
     // 纪律：渲染帧只负责采样输入，逻辑帧才推进状态机（CombatClock 的执行顺序是 order 1000）
     private void OnEnable()
