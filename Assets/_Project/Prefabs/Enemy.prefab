@@ -135,7 +135,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8d99323beea4fad4eb009d1defe05a95, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AttackHitbox
-  damage: 10
+  owner: {fileID: 850414945708402444}
+  shape: {fileID: 2130250934180433561}
 --- !u!1 &6264281177966388692
 GameObject:
   m_ObjectHideFlags: 0
@@ -149,6 +150,7 @@ GameObject:
   - component: {fileID: 311636272165554414}
   - component: {fileID: 793800017843275202}
   - component: {fileID: 850414945708402444}
+  - component: {fileID: 3539952178830150286}
   m_Layer: 9
   m_Name: Enemy
   m_TagString: Untagged
@@ -169,8 +171,8 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 6496474125480955758}
   - {fileID: 6258531145725441358}
+  - {fileID: 6496474125480955758}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!33 &7838025130236329629
@@ -267,3 +269,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CombatActor
   state: 0
   hp: 100
+--- !u!114 &3539952178830150286
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6264281177966388692}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2f50d0bd31b0d4648a0ff42524466d55, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyCombat
+  actor: {fileID: 850414945708402444}
+  attackHitbox: {fileID: 2035212566093135185}
+  attack: {fileID: 11400000, guid: ebcd2b6af06b6ed48afbb4283701484a, type: 2}
+  idleFrames: 90
