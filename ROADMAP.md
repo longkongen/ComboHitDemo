@@ -1,7 +1,7 @@
 # ComboHitDemo · 开发路线图
 
 > 微高速动作 ACT Demo（Unity 6 / C#）：**连招 · GP · 极限闪避 · 相杀拼刀 · QTE 处决**
-> 最后更新：2026-10-10（阶段 2 第 3 步完成；表现层决策：后置到阶段 11）
+> 最后更新：2026-10-10（阶段 2 第 4 步完成 —— 木桩会挥刀；表现层决策：后置到阶段 11）
 
 ---
 
@@ -25,6 +25,7 @@
    `[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]` 重置方法，否则会出现"第二次 Play 动作快一倍 / `MissingReferenceException`"这类极难查的问题。
 7. **调试日志要按"单位时间统计"，不要按"每 N 帧打印一次"**：状态一旦停住，后者会每帧刷屏把现场冲掉（阶段 1 已经踩过这个坑，阶段 3 做顿帧时会再遇到）。
 8. **表现层（模型 / 动画 / 特效）只能"读"状态与帧数，绝不允许反向驱动逻辑**：动画播放位置由 `elapsedFrames / 该状态总帧数` 算出的归一化时间驱动，改帧数动画自动跟着变；`Animation Event` 只准用于表现（脚步音、特效、拖尾），**永远不准用来开判定窗口** —— 判定窗口的唯一来源永远是 `AttackData` 的帧数。
+9. **引用一律在 Prefab Mode 内接线**：component / 子物体的引用（`owner`、`shape`、`actor`、`attackHitbox`…）必须在 Prefab 资产内部连好；场景实例只负责摆位置与朝向。凡是"只在场景实例上 override"的引用都是定时炸弹 —— 新建实例、他人 clone、或把 Prefab 拖进另一个场景时会**静默失效**（`owner 未接线` → 自我 disable，不报打法错误只报一行 LogError）。已经踩过两次：HUD 的 `player` 字段拖了 Prefab 资产、两个 Prefab 的 `AttackHitbox.owner` 只存在于场景 override 里。
 
 ## 2. 机制 → 规则 → 落地文件
 
@@ -83,7 +84,7 @@
 - ✅ 第 1 步：User Layer `Player`(8) / `Enemy`(9) / `Hitbox`(10) / `Hurtbox`(11) 建好并归位（两个 Prefab + 场景实例）
 - ✅ 第 2 步：`Hurtbox`（`owner` + `Awake` 校验）+ `CombatActor.TakeDamage` / `Hp` / `IsDead`
 - ✅ 第 3 步：`CombatResolver`（唯一仲裁口）+ `AttackHitbox` 改为主动查询（`OverlapBoxNonAlloc` + `HashSet` 去重 + `Owner` 自伤过滤 + `SyncTransforms`）；实测一套连招伤害 10/15/25 全对，一次挥击只结算一次
-- 🟡 第 4 步：木桩 Prefab（沿用了 `Enemy` 这个名字）+ `DummyCombat` —— 按固定节拍挥刀，与玩家共用 `AttackData` / 判定帧 / 仲裁口
+- ✅ 第 4 步：木桩 Prefab（沿用了 `Enemy` 这个名字）+ `EnemyCombat` + `Data/Attack_Enemy.asset`（`Slash_Enemy`：起手 18 / 判定 4 / 收招 26 / 伤害 8，配 `idleFrames = 90` → 一个循环 138 逻辑帧 ≈ 2.3 秒一次挥刀）—— 与玩家共用 `AttackData` / 判定帧 / 仲裁口；实测同屏两个 `AttackHitbox` 各自独立去重、双方各自扣血（木桩 8 点 ×3 打玩家 92→84→76；玩家 10/15/10 打木桩 90→75→65，连招正确复位）
 - ⬜ 第 5 步：HUD 显示双方 HP，验收
 - ✅ 决策：表现层后置 —— 阶段 2–10 只做判定与规则，当前仅加「零资源反馈」（`AttackHitbox` / `Hurtbox` 的 `OnDrawGizmos` 调试可视化 + 朝向指示物），模型/动画留到阶段 11
 
@@ -123,6 +124,12 @@
 
 ## 7. 变更记录
 
+- **2026-10-10 · 阶段 2 第 4 步完成（木桩会挥刀）**
+  - 新增 `Assets/_Project/Scripts/Combat/EnemyCombat.cs`：木桩节拍状态机（`Idle` 90 帧 → `Attack` → `Recovery`，`ChangeState` 为唯一计时复位点），复用 `CombatClock` / `AttackData` / `AttackHitbox` / `CombatResolver`，是 `PlayerCombat` 的简化镜像
+  - 新增 `Assets/_Project/Data/Attack_Enemy.asset`；`Assets/_Project/Prefabs/Enemy.prefab` 根物体挂 `EnemyCombat` 并接线 `actor` / `attackHitbox` / `attack` / `idleFrames`
+  - 编码：`EnemyCombat.cs` 由 GBK 转 UTF-8 无 BOM（本项目第 3 个 GBK 文件，前两个是 `PlayerCombat.cs` / `AttackHitbox.cs`）；日志前缀 `[DummyCombat]` → `[EnemyCombat]`
+  - **踩坑（Prefab 漂移）**：`AttackHitbox.owner` / `shape` 一度只在**场景实例**上存了 override，两个 Prefab 资产里是空的 —— 运行能打中，但新建实例 / 他人 clone 会静默失效（`owner 未接线` → 自我 disable）。已在 Prefab Mode 内补接线，并据此新增纪律 #9
+  - 结论：至此"两个角色共用同一条判定链路"成立，阶段 2 只剩第 5 步（HUD 显示双方 HP + 整体验收）
 - **2026-10-10 · 阶段 2 第 1–3 步完成 + 表现层决策**
   - 第 1 步：建立 User Layer `Player`(8) / `Enemy`(9) / `Hitbox`(10) / `Hurtbox`(11)（代码里一律 `LayerMask.GetMask(...)`，不硬编码层号）
   - 第 2 步：`Hurtbox`（`owner` + `Awake` 校验，未接线时自我 disable）；`CombatActor` 增加 `hp` / `Hp` / `IsDead` / `TakeDamage`
