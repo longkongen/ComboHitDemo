@@ -119,6 +119,17 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!114 &55196461 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 2541319228010464586, guid: 16df08933cf130c4fb95cacfb6fffc66, type: 3}
+  m_PrefabInstance: {fileID: 832045115}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dfa5b04d8ebff9445bd57378e6adc98b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerCombat
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0
@@ -393,6 +404,7 @@ GameObject:
   m_Component:
   - component: {fileID: 544320327}
   - component: {fileID: 544320326}
+  - component: {fileID: 544320328}
   m_Layer: 0
   m_Name: System
   m_TagString: Untagged
@@ -427,6 +439,19 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &544320328
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 544320325}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 03c13599fd2afd0438cf7fb1df3c2315, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CombatDebugHUD
+  player: {fileID: 55196461}
 --- !u!1001 &832045115
 PrefabInstance:
   m_ObjectHideFlags: 0

@@ -15,7 +15,23 @@ public class CombatDebugHUD : MonoBehaviour
 
     private void HandleTick(int frame)
     {
-        if (player == null) return;
+        // 自诊断 1：字段没接线
+        if (player == null)
+        {
+            line1 = "CombatDebugHUD: player not assigned";
+            line2 = "-> drag the Player from the Hierarchy into the player field";
+            return;
+        }
+
+        // 自诊断 2：拖成了 Project 窗口里的 Prefab 资产
+        // Prefab 资产永远不会运行，它的字段永远是初始值（状态永远 Idle）
+        // 场景实例的 scene.IsValid() 为 true，Prefab 资产为 false
+        if (!player.gameObject.scene.IsValid())
+        {
+            line1 = "CombatDebugHUD: player is a Prefab ASSET, not a scene instance";
+            line2 = "-> drag the Player from the HIERARCHY, not from the PROJECT window";
+            return;
+        }
 
         AttackData a = player.CurrentAttack;
         if (a == null)
