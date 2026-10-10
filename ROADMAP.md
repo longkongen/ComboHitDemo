@@ -1,7 +1,7 @@
 # ComboHitDemo · 开发路线图
 
 > 微高速动作 ACT Demo（Unity 6 / C#）：**连招 · GP · 极限闪避 · 相杀拼刀 · QTE 处决**
-> 最后更新：2026-10-07（阶段 1 第 1、2 步完成）
+> 最后更新：2026-10-10（阶段 1 完成，阶段 2 启动）
 
 ---
 
@@ -46,8 +46,8 @@
 | 阶段 | 目标（做完能看到什么） | 验收标准 | 难度 | 状态 |
 |---|---|---|---|---|
 | **0. 地基收尾** | 工程干净、可回滚、可反复实验 | 能 Play、WASD 移动、按攻击键有反馈；已提交基线 | S | ✅ 完成 |
-| **1. 招式时间轴** | 攻击不再是硬编码秒数，而是「起手/判定/收招」可调 | 在 Inspector 改数值手感立刻变；能看到判定帧 | S–M | 🟡 进行中（第 1、2 步完成） |
-| **2. 判定层 + 木桩敌人** | 第一次真正「打中」并掉血 | 攻击能打掉木桩血；木桩挥刀能打到我 | M | ⬜ |
+| **1. 招式时间轴** | 攻击不再是硬编码秒数，而是「起手/判定/收招」可调 | 在 Inspector 改数值手感立刻变；能看到判定帧 | S–M | ✅ 完成 |
+| **2. 判定层 + 木桩敌人** | 第一次真正「打中」并掉血 | 攻击能打掉木桩血；木桩挥刀能打到我 | M | 🟡 进行中 |
 | **3. 受击反馈与生死** | 挨打有硬直、击退、顿帧、能死 | 能打死木桩，也能被打死 | S–M | ⬜ |
 | **4. 连招系统** | 三段连起来且「乱按不串招」 | 连按顺畅出 1→2→3；停手回 Idle | M | ⬜ |
 | **5. 防御三件套** | 闪避 / 极限闪避 / GP 都能用且回耐 | 闪避能穿攻击；极限闪避有提示并回耐；GP 能弹开并回耐 | M–L | ⬜ |
@@ -69,12 +69,17 @@
 - 清理场景 Player 实例上失效的 `m_RemovedComponents` override
 - 修复：输入缓冲泄漏、重复状态迁移、`AttackData.damage` / `recovery` 未生效
 
-**阶段 1（进行中）**
+**阶段 1（已完成）**
 - ✅ 决策：逻辑帧基准 = 自建 60fps 逻辑帧；招式数据 = 每招式一个 `ScriptableObject` 资产
 - ✅ **第 1 步**：`AttackData` → `ScriptableObject`（帧为单位）；`Data/` 下 3 个招式资产（Slash1 `10/6/5/11`、Slash2 `15/8/6/13`、Slash3 `25/12/9/21`）；`PlayerCombat` 改为引用 `AttackData[] combo`；临时桥接 `FramesToSeconds` 让节奏与改动前一致
 - ✅ **第 2 步**：`CombatClock`（`Scripts/Common/`）—— 累加器 + 固定步长、补帧上限 5 防 spiral of death、`static event OnTick(int frame)` + `static Frame`、`[DefaultExecutionOrder(1000)]`、静态状态重置。实测显示 483fps 时逻辑帧稳定 60/s；场景新增 `System` 物体挂载它
-- ⬜ **第 3 步**：`PlayerCombat` 帧化 —— `elapsedFrames` 作单一来源、阶段由帧数派生、删掉 `FramesToSeconds` 桥接与死字段、改为订阅 `CombatClock.OnTick`
-- ⬜ **第 4 步**：调试 HUD（招式名 / 阶段 / 第几帧）
+- ✅ **第 3 步**：`PlayerCombat` 帧化 —— `elapsedFrames` 作单一来源（`ChangeState` 里唯一复位）、阶段由帧数派生、订阅 `CombatClock.OnTick`、输入缓冲改帧；`FramesToSeconds` 与 `attackDuration`/`recoveryDuration`/`attackActive` 全部删除
+- ✅ **第 4 步**：`CombatDebugHUD`（`Scripts/Common/`）调试 HUD —— 招式名 / 阶段 / 当前帧 / 窗口边界，全 ASCII（IMGUI 字体无中文字形）；`PlayerCombat` 暴露只读 `State` / `CurrentAttack` / `ElapsedFrames`
+- 排查记录：HUD 恒显示 Idle 是因为 `player` 字段引用了 **Project 窗口的 Prefab 资产**（不再运行的模板，字段永远是初始值）；现已在 HUD 内加自诊断（`!scene.IsValid()` → "Prefab ASSET" 提示）
+
+**阶段 2（进行中）**
+- ⬜ 待定决策：命中检测方式、木桩敌人形态（见第 5 节）
+- ⬜ 目标：打中木桩掉血、木桩挥刀打到我；建立 `Hurtbox` + `CombatResolver` 判定层
 
 ## 5. 待定决策（到对应阶段再定，届时附上每种选法的代价）
 
@@ -82,6 +87,8 @@
 |---|---|
 | 逻辑帧基准：自建 60fps 累加器 vs `FixedUpdate` 50Hz | ✅ **已定：自建 60fps 逻辑帧**（阶段 1） |
 | 招式数据形态：`ScriptableObject` 资产 vs 代码内 `new` | ✅ **已定：每招式一个 SO 资产**（阶段 1） |
+| 命中检测方式：物理 trigger 事件 vs 每逻辑帧主动 `OverlapBox` 查询 | 🟡 待定（阶段 2） |
+| 木桩敌人形态：纯静止靶子 vs 会规律挥刀的假人 | 🟡 待定（阶段 2） |
 | GP / 极限闪避成功后「回耐」与「一闪」的关系 | 阶段 6 |
 | 一闪的定位与消耗（是否消耗气刃） | 阶段 6–7 |
 | 相杀的成立条件（是否要求双方都处于攻击判定帧） | 阶段 8 |
@@ -91,9 +98,11 @@
 
 | 项 | 归属阶段 |
 |---|---|
-| `PlayerCombat.attackDuration` / `recoveryDuration` 已成死字段（时间改由 `AttackData` 驱动） | 1（第 3 步清理） |
-| `attackActive` 一个字段承担两个语义（startup 结束 / 处于判定帧） | 1（第 3 步改为帧数派生） |
-| `FramesToSeconds` 临时桥接（第 3 步删除，即为帧化完成的标志） | 1（第 3 步） |
+| `PlayerCombat.attackDuration` / `recoveryDuration` 已成死字段（时间改由 `AttackData` 驱动） | ✅ 已解决（阶段 1 第 3 步） |
+| `attackActive` 一个字段承担两个语义（startup 结束 / 处于判定帧） | ✅ 已解决（阶段 1 第 3 步，改由帧数派生） |
+| `FramesToSeconds` 临时桥接（第 3 步删除，即为帧化完成的标志） | ✅ 已解决（阶段 1 第 3 步） |
+| `AttackHitbox.damage` 仍是 `public` 字段（应改 `private` + 只读属性） | 2 |
+| `PlayerMotor` 仍在 `Update` 里读输入并位移，未走逻辑帧 | 2–3 |
 | `AttackHitbox` 缺 Layer/Tag 过滤（会打到自己与地面） | 2 |
 | `AttackHitbox` 缺"同一次挥击只结算一次"的去重 | 2 |
 | 命中未扣血（`AttackHitbox` 只有日志，还没有 `Hurtbox` 与结算） | 2 |
@@ -105,6 +114,11 @@
 
 ## 7. 变更记录
 
+- **2026-10-10 · 阶段 1 完成，阶段 2 启动**
+  - 第 3 步：`PlayerCombat` 帧化 —— `elapsedFrames` 单一计时来源、阶段由 `AttackData` 帧数派生、订阅 `CombatClock.OnTick`（`Update` 只做输入采样）、输入缓冲改帧；删除 `FramesToSeconds` 桥接
+  - 第 4 步：新增 `CombatDebugHUD` 并挂到场景 `System` 物体；`PlayerCombat` 暴露只读调试属性
+  - 排查：HUD 恒显示 `Idle` 的根因是 `player` 字段引用了 Project 窗口的 **Prefab 资产**（不运行的模板）；教训：引用必须拖 Hierarchy 里的场景实例；已在 HUD 内加 `scene.IsValid()` 自诊断
+  - 纪律 #7 追加：调试日志按"单位时间统计"而非"每 N 帧打印"
 - **2026-10-07 · 阶段 1 第 1、2 步完成**
   - 第 1 步：`AttackData` 改为 `ScriptableObject`（帧为单位、`OnValidate` 夹紧、派生属性）；`Data/` 下建 3 个招式资产并接入 Prefab 的 `combo` 数组；`PlayerCombat` 移除硬编码招式与 `new AttackData(...)`
   - 第 2 步：新增 `CombatClock` 全局唯一时基并挂到场景 `System` 物体；确立「输入采样 → 逻辑 tick → 表现」三层执行顺序；记录"静态状态手动重置"与"日志按单位时间统计"两条纪律（均因本工程禁用 Domain Reload / 探针刷屏事件而来）
