@@ -11,7 +11,7 @@ public class AttackHitbox : MonoBehaviour
     private readonly HashSet<Hurtbox> hitTargets = new HashSet<Hurtbox>();  // 本次挥击已结算过的目标
     private readonly Collider[] results = new Collider[16];                 // 复用数组，别每帧 new
     private int hurtboxMask;
-    private float damage;
+    private AttackData currentAttack;
     private bool isActive = false;
 
     private void Awake()
@@ -22,16 +22,16 @@ public class AttackHitbox : MonoBehaviour
         if (shape == null) { Debug.LogError("[AttackHitbox] 缺 BoxCollider", this); enabled = false; return; }
         if (hurtboxMask == 0) Debug.LogError("[AttackHitbox] 找不到 Hurtbox 层", this);
     }
-    public void Activate(float attackDamage)
+    public void Activate(AttackData attack)
     {
-        damage = attackDamage;
+        currentAttack = attack;
         hitTargets.Clear();
         isActive = true;
         CheckHit();
     }
     public void CheckHit()
     {
-        if (!isActive) return;
+        if (!isActive || currentAttack == null) return;
         Physics.SyncTransforms();   // 必须在查询之前，理由见下
 
         Vector3 center = shape.transform.TransformPoint(shape.center);
@@ -50,7 +50,7 @@ public class AttackHitbox : MonoBehaviour
             if (hitTargets.Contains(hurtbox)) continue;   // 同一次挥击只结算一次
 
             hitTargets.Add(hurtbox);
-            CombatResolver.ResolveHit(owner, hurtbox.Owner, damage);
+            CombatResolver.ResolveHit(owner, hurtbox.Owner, currentAttack);
         }
     }
      private void OnEnable() { CombatClock.OnTick += OnTick; }

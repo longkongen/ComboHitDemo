@@ -39,6 +39,7 @@ public class EnemyCombat : MonoBehaviour
             case CombatState.Idle: UpdateIdle(); break;
             case CombatState.Attack: UpdateAttack(); break;
             case CombatState.Recovery: UpdateRecovery(); break;
+            case CombatState.Hit: UpdateHit(); break;
         }
     }
 
@@ -56,7 +57,7 @@ public class EnemyCombat : MonoBehaviour
         if (actor.StateFrames == attack.ActiveStartFrames)   // 起手结束那一帧：开判定
         {
             Debug.Log($"木桩进入 Active（第 {actor.StateFrames} 帧）");
-            attackHitbox.Activate(attack.damage);            // ← 注意这里日志在 Activate 之前
+            attackHitbox.Activate(attack);            // ← 注意这里日志在 Activate 之前
         }
 
         if (actor.StateFrames >= attack.ActiveEndFrames)     // 判定窗口结束：关判定并收招
@@ -69,6 +70,17 @@ public class EnemyCombat : MonoBehaviour
     private void UpdateRecovery()
     {
         if (actor.StateFrames >= attack.recoveryFrames) actor.SetState(CombatState.Idle);
+    }
+
+    // 受击硬直：时长由“打中我的那一招”决定（CombatActor.LastHit）
+    private void UpdateHit()
+    {
+        // 硬直期间每帧无条件收刀：Deactivate 是幂等的，比“边沿检测第一帧”省心
+        attackHitbox.Deactivate();
+
+        AttackData hit = actor.LastHit;
+        int stun = (hit != null) ? hit.hitStunFrames : 0;
+        if (actor.StateFrames >= stun) actor.SetState(CombatState.Idle);   // 恢复后从 Idle 重新数 90 帧节拍
     }
 
     // ===== 调试用只读快照（与 PlayerCombat 对称）：不参与战斗逻辑，只给 CombatDebugHUD 看 =====

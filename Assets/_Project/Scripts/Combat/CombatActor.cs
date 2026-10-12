@@ -10,7 +10,8 @@ public class CombatActor : MonoBehaviour
     public bool IsDead => hp <= 0f;
 
     public CombatState State => state;
-
+    private AttackData lastHit;
+    public AttackData LastHit => lastHit;
     // 进入当前状态时的逻辑帧号；StateFrames 是“读出来的差值”，不是自增计数。
     // 为什么不用“订阅 OnTick 自己 ++”：同一帧里谁先被通知取决于组件顺序，
     // 一旦先后颠倒，整条帧数表就会错一帧；差值式没有这个问题（同一逻辑帧内 Frame 恒定）。
@@ -48,6 +49,18 @@ public class CombatActor : MonoBehaviour
 
 
 
+    }
+    /// <summary>
+    /// 被命中：扣血 + 进入硬直。硬直时长由“打中我的那一招”决定
+    /// </summary>
+    public void ReceiveHit(AttackData attack)
+    {
+        if (IsDead) return;
+        if (attack == null) return;
+        TakeDamage(attack.damage);
+        if (IsDead) return;
+        SetState(CombatState.Hit);
+        Debug.Log($"[CombatActor] {name} 进入硬直：{attack.attackName}（{attack.hitStunFrames} 帧）", this);
     }
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()

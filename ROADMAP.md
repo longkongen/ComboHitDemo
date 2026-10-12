@@ -96,7 +96,15 @@
   - `CombatActor.stateEnteredFrame` + `public int StateFrames => CombatClock.Frame - stateEnteredFrame;`（**差值式**，`SetState` 内唯一复位）。刻意**不用**"订阅 `OnTick` 自增"：`CombatActor` 与控制器订阅同一个事件，谁先被通知只由组件顺序决定，先后颠倒就会让整条帧数表错一帧；差值式没有这个隐患，而且顿帧期间 `Frame` 不增 ⇒ 所有状态计时**自动冻结**
   - `CombatClock.hitStopFrames` + `public static void RequestHitStop(int frames)`（取 max 不叠加，叠加会导致连击越打越卡）+ `Update` 顶部冻结分支（**必须放在 `accumulator += Time.deltaTime` 之前**，分支内 `hitStopFrames--; accumulator = 0f; return;`）
   - `PlayerMotor` 改「`Update` 只采样输入 / `OnCombatTick` 才位移」，步长一律 `CombatClock.TickDelta`；`PlayerCombat` / `EnemyCombat` 删除各自的计时字段，改读 `actor.StateFrames`
-- ⬜ 第 1 步：受击硬直（`AttackData.hitStunFrames` + `CombatActor.ReceiveHit` + 控制器 `Hit` 分支）
+- ✅ 第 1 步：受击硬直（`AttackData.hitStunFrames` + `CombatActor.ReceiveHit` + 控制器 `Hit` 分支）
+  - `AttackData.hitStunFrames`（每招式不同，`OnValidate` 夹 ≥1）；4 个资产实填 **10 / 14 / 20 / 12**（Slash1 / Slash2 / Slash3 / Enemy）
+  - `CombatActor.lastHit` + `public AttackData LastHit` + `public void ReceiveHit(AttackData attack)`（`TakeDamage` → `if (IsDead) return;` → 记 `lastHit` → `SetState(Hit)`）；`CombatResolver.ResolveHit(attacker, defender, attack)` 改传整个 `AttackData`（阶段 8 相杀需要"招式身份"而非数值）；`AttackHitbox.Activate(AttackData)`（原 `float damage` 每加一个效果就得改签名）
+  - 两个控制器的 `Hit` 分支 `UpdateHit()`：**每帧幂等**地收刀 + 清输入缓冲与 `comboStep`，`actor.StateFrames >= LastHit.hitStunFrames` 时回 `Idle`（刻意不写"进入 `Hit` 的第 0 帧触发一次" —— `StateFrames == 0` 不可靠）
+  - `PlayerMotor` 读 `CombatActor.State`：`Hit` / `Dead` 期间跳过水平位移，重力照常
+  - 死亡兜底：`CombatActor.ReceiveHit` 在致命伤时提前 `return`（不进 `Hit`），因此 `Dead` 状态由控制器每 tick 兜底切换（否则真人会原地继续挥刀）
+  - 验收取证（`Logs/Editor.log`）：`[CombatActor] Player 进入硬直：Slash_Enemy（12 帧）` → `PlayerCombat:UpdateHit` → `进入 Idle`；`error CS` 0
+  - 排查记录：用户报"受击后仍能移动" —— 实为 **12 逻辑帧 = 0.2 秒**，而木桩每 2.3 秒才挥一刀，且本阶段还没有顿帧/击退/视觉反馈，肉眼分辨不出；判定实验 = 把 `Attack_Enemy.hitStunFrames` 临时改 120
+  - 已证实的事实：SO 资产 YAML 缺字段时运行期取 **C# 字段初始值**（`Attack_Enemy` 缺字段却打出 12 帧），不是取 0
 - ⬜ 第 2 步：顿帧接命中 · ⬜ 第 3 步：击退（含 `EnemyMotor`）· ⬜ 第 4 步：生死（`Dead` 状态 + 死后关判定）
 
 ## 5. 待定决策（到对应阶段再定，届时附上每种选法的代价）
@@ -111,6 +119,8 @@
 | 顿帧的作用范围：冻结整个逻辑时钟 vs 只暂停参与双方 | ✅ **已定：冻结整个逻辑时钟**（阶段 3）—— 实现最简、语义最直白（拳拳到肉时全场入定），代价是顿帧期间 `OnTick` 不广播，所有系统一起冻结 |
 | `PlayerMotor` 的帧化时机：现在 vs 等击退需求出现再改 | ✅ **已定：现在就帧化**（阶段 3）—— 击退必须走逻辑帧；两套时基混用一定会出偏移，而且越晚改越贵 |
 | 状态计时的归属：各控制器各自计数 vs 由 `CombatActor` 持有 | ✅ **已定：`CombatActor.StateFrames`**（阶段 3）—— 纪律 #3「状态唯一来源」的必然延伸，且顿帧自动冻结 |
+| 命中链路的参数形态：传 `float damage` + `int hitStunFrames` vs 传整个 `AttackData` | ✅ **已定：传 `AttackData`**（阶段 3）—— 阶段 8 相杀要判断"招式身份"（轻/重/特殊），按数值传参每加一个效果都得改签名 |
+| 硬直期间的移动：照常能动 vs 锁住 | ✅ **已定：锁住水平位移、重力照常**（阶段 3）—— `PlayerMotor` 读 `CombatActor.State`，`Hit` / `Dead` 时不 `Move()` |
 | 表现层引入时机：边做机制边接模型/动画 vs 逻辑优先、表现后置 | ✅ **已定：逻辑优先，表现后置到阶段 11**（阶段 2）—— 帧数表在阶段 5/6/8 还会变动，现在做动画对表等于白干；当前只加「零资源反馈」（Gizmos 判定可视化 + 朝向指示物） |
 | GP / 极限闪避成功后「回耐」与「一闪」的关系 | 阶段 6 |
 | 一闪的定位与消耗（是否消耗气刃） | 阶段 6–7 |
@@ -136,9 +146,19 @@
 | 无 `.asmdef` 分层；`Scripts/Input` 仍为空目录 | 1–4 |
 | 项目内行尾混用（`PlayerMotor.cs` 全 LF、`CombatActor.cs` 前 17 行 LF 之后 CRLF、其余 CRLF），建议加 `.gitattributes` 统一 | 任意（2026-10-12 踩坑：按"统一 CRLF"重写产生 51 行 / 126 行**假 diff**；改文件前先 `git ls-files --eol`，按各文件自身行尾写，禁止全局归一化） |
 | `TutorialInfo/`、`Readme.asset` 为模板残留 | 任意 |
+| 招式资产缺 `hitStunFrames` 字段（运行期会取 C# 初始值，设计值与实际值可能不一致） | ✅ 已解决（阶段 3 第 1 步：4 个资产实填 10 / 14 / 20 / 12） |
 
 ## 7. 变更记录
 
+- **2026-10-12 · 阶段 3 第 1 步完成（受击硬直）**
+  - `AttackData.hitStunFrames`（4 个资产实填 10 / 14 / 20 / 12）+ `CombatActor.ReceiveHit(AttackData)` / `LastHit` + `CombatResolver.ResolveHit(attacker, defender, attack)`（改传整个招式资产）+ `AttackHitbox.Activate(AttackData)`
+  - 两个控制器新增 `Hit` 分支 `UpdateHit()`（每帧幂等收刀 / 清输入缓冲 / 清 `comboStep`）；`PlayerMotor` 在 `Hit` / `Dead` 期间锁水平位移；`CombatDebugHUD` 显示 `HIT` 阶段并改显示"打中我的那一招"
+  - 新增死亡兜底：致命伤不进 `Hit`（`ReceiveHit` 提前 `return`），`Dead` 由控制器每 tick 兜底切换
+  - **踩坑（引用）**：HUD 的 `enemy` 字段被拖成了 Prefab 资产 —— 场景 YAML 里写成 `{fileID: 3539952178830150286, guid: a12043e7604ae9e468cfb126eb647575, type: 3}`；而正确指向场景实例的 `player` 写作 `{fileID: 55196461}`（场景本地 stripped ID）。**判据：带 Prefab guid 的引用 = 资产模板，不是场景实例**；已撤回该行，回到 `Awake` 自动查找
+  - **踩坑（编译日志）**：`Logs/Editor.log` 是追加式、`error CS` 是**累计**计数；只看最后一批才不会把已修好的旧错当现行错（本次真错 = `EnemyCombat.cs(60,35)` / `PlayerCombat.cs(157,35)` 的 `CS1503: cannot convert from 'float' to 'AttackData'`）
+  - **踩坑（行尾二）**：pwsh here-string 插入的块是 LF，把 `EnemyCombat.cs` / `CombatDebugHUD.cs` / `PlayerCombat.cs` 变成 mixed，diff 被放大；按各文件索引行尾归一后收敛
+  - **踩坑（终端中文）**：`Get-Content` 把 UTF-8 中文写到 stdout 会显示乱码（看着像文件损坏），判断文件内容一律用 read 工具
+  - 待验证：死亡兜底尚未经过一次重编译
 - **2026-10-12 · 阶段 2 完成 + 阶段 3 第 0 步完成**
   - 阶段 2 第 5 步：`CombatDebugHUD` 扩成三行（双方 HP / 状态 / 招式 / 阶段 / 帧数 + 逻辑 tick 计数）；`PlayerCombat` / `EnemyCombat` 各暴露只读 `Actor` / `CurrentAttack` / `ElapsedFrames`；HUD 的 `player` / `enemy` 未接线时 `Awake` 自动 `FindAnyObjectByType` 查找并打一行提示
   - 修掉编译警告 `CS0618`：`FindFirstObjectByType` → `FindAnyObjectByType`（"First" 按 instanceID 排序，本工程禁用 Domain Reload 时 instanceID 跨 Play 持续增长 ⇒ 同一次编辑会话里第二次 Play 可能挑中不同对象）

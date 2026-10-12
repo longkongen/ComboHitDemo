@@ -17,3 +17,4 @@ MonoBehaviour:
   startupFrames: 6
   activeFrames: 5
   recoveryFrames: 11
+  hitStunFrames: 10

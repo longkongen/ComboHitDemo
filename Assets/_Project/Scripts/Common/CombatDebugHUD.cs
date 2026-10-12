@@ -73,7 +73,10 @@ public class CombatDebugHUD : MonoBehaviour
         // 注意：e 是「当前状态内」的帧数，所以 Attack 与 Recovery 各有一套边界
         // 这里刻意把阶段判断重复了一遍：HUD 显示 ACTIVE 而判定盒没红，说明两边不一致
         CombatState state = actor.State;
-        string name = (a != null) ? a.attackName : "-";
+        // 硬直时显示“打中我的那一招”：受害方手里的 currentAttack 是被打断的那一招，不是打中他的
+        string name = (state == CombatState.Hit && actor.LastHit != null)
+                    ? actor.LastHit.attackName
+                    : ((a != null) ? a.attackName : "-");
         string phase;
         int span;
 
@@ -86,6 +89,10 @@ public class CombatDebugHUD : MonoBehaviour
             case CombatState.Recovery:
                 phase = "RECOVERY";
                 span  = (a != null) ? a.recoveryFrames : 0;
+                break;
+            case CombatState.Hit:
+                phase = "HIT     ";
+                span  = (actor.LastHit != null) ? actor.LastHit.hitStunFrames : 0;
                 break;
             case CombatState.Dead:
                 phase = "DEAD    ";

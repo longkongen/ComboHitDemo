@@ -10,7 +10,7 @@ public class AttackData : ScriptableObject
     public int startupFrames = 6;
     public int activeFrames = 5;
     public int recoveryFrames = 11;
-
+    public int hitStunFrames = 12;
     public int TotalFrames  => startupFrames + activeFrames + recoveryFrames;
     public int ActiveStartFrames => startupFrames;
     public int ActiveEndFrames => startupFrames + activeFrames;
@@ -21,6 +21,7 @@ public class AttackData : ScriptableObject
         startupFrames = Mathf.Max(1, startupFrames);
         activeFrames = Mathf.Max(1, activeFrames);
         recoveryFrames = Mathf.Max(1, recoveryFrames);
+        hitStunFrames = Mathf.Max(1, hitStunFrames);
     }
 
 

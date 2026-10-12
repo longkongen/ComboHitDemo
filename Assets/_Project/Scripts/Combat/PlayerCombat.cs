@@ -88,6 +88,15 @@ public class PlayerCombat : MonoBehaviour
     {
         UpdateInputBuffer();
 
+        // 死亡兜底：完整的死亡流程在阶段 3 第 4 步，这里先与 EnemyCombat 对齐（收刀 + 躺平）
+        // 注意 CombatActor.ReceiveHit 在致命伤时会 return，不进入 Hit —— 所以“进 Dead”必须由控制器负责
+        if (actor.IsDead)
+        {
+            attackHitbox.Deactivate();
+            if (actor.State != CombatState.Dead) actor.SetState(CombatState.Dead);
+            return;
+        }
+
         switch (actor.State)
         {
             case CombatState.Idle:
@@ -98,6 +107,9 @@ public class PlayerCombat : MonoBehaviour
                 break;
             case CombatState.Recovery:
                 UpdateRecovery();
+                break;
+            case CombatState.Hit:
+                UpdateHit(); 
                 break;
         }
     }
@@ -151,7 +163,7 @@ public class PlayerCombat : MonoBehaviour
         // 跨进判定期的那一帧：开判定（帧化后可以精确用 == 定位某一帧，秒计时做不到）
         if (actor.StateFrames == currentAttack.ActiveStartFrames)
         {
-            attackHitbox.Activate(currentAttack.damage);
+            attackHitbox.Activate(currentAttack);
             Debug.Log($"进入 Active（第 {actor.StateFrames} 帧）");
         }
 
@@ -183,6 +195,20 @@ public class PlayerCombat : MonoBehaviour
                 comboStep = 0;
                 ChangeState(CombatState.Idle);
             }
+        }
+    }
+    private void UpdateHit()
+    {
+        attackHitbox.Deactivate();
+        attackBuffered = false;
+        bufferFramesLeft = 0;
+        comboStep = 0;
+
+        AttackData hit = actor.LastHit;
+        int stun = (hit != null) ? hit.hitStunFrames : 0;
+        if (actor.StateFrames >= stun)
+        {
+            ChangeState(CombatState.Idle);
         }
     }
 
