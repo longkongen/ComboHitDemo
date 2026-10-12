@@ -463,6 +463,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CombatDebugHUD
   player: {fileID: 55196461}
+  enemy: {fileID: 3851966603847174561}
 --- !u!65 &768297886 stripped
 BoxCollider:
   m_CorrespondingSourceObject: {fileID: 2130250934180433561, guid: a12043e7604ae9e468cfb126eb647575, type: 3}
@@ -792,6 +793,17 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: a12043e7604ae9e468cfb126eb647575, type: 3}
+--- !u!114 &3851966603847174561 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 3539952178830150286, guid: a12043e7604ae9e468cfb126eb647575, type: 3}
+  m_PrefabInstance: {fileID: 3851966603847174560}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2f50d0bd31b0d4648a0ff42524466d55, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyCombat
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

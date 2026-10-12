@@ -105,7 +105,12 @@
   - 验收取证（`Logs/Editor.log`）：`[CombatActor] Player 进入硬直：Slash_Enemy（12 帧）` → `PlayerCombat:UpdateHit` → `进入 Idle`；`error CS` 0
   - 排查记录：用户报"受击后仍能移动" —— 实为 **12 逻辑帧 = 0.2 秒**，而木桩每 2.3 秒才挥一刀，且本阶段还没有顿帧/击退/视觉反馈，肉眼分辨不出；判定实验 = 把 `Attack_Enemy.hitStunFrames` 临时改 120
   - 已证实的事实：SO 资产 YAML 缺字段时运行期取 **C# 字段初始值**（`Attack_Enemy` 缺字段却打出 12 帧），不是取 0
-- ⬜ 第 2 步：顿帧接命中 · ⬜ 第 3 步：击退（含 `EnemyMotor`）· ⬜ 第 4 步：生死（`Dead` 状态 + 死后关判定）
+- 🟡 第 2 步：顿帧接命中（代码就绪，待手感验收）
+  - `AttackData.hitStopFrames`（`OnValidate` 夹 **≥ 0** —— 0 是合法语义"这一招不顿帧"；硬直才必须 ≥ 1）；4 个资产实填 **4 / 6 / 10 / 6**（Slash1 / Slash2 / Slash3 / Enemy = 67 / 100 / 167 / 100 ms @60Hz）
+  - `CombatResolver.ResolveHit` 末尾加一行 `CombatClock.RequestHitStop(attack.hitStopFrames);` —— 顿帧属于"这次命中"而非任何一方；位置在所有守卫之后 ⇒ 空挥不顿帧、已死目标不顿帧、多次命中取 max 不叠加
+  - **修掉一个真 bug（计时单位）**：`CombatClock` 原来的冻结是 `Update` 顶部 `hitStopFrames--`，即**每渲染帧扣 1** ⇒ 顿帧真实时长随渲染帧率漂移（本机 483 fps 时 `RequestHitStop(6)` 只有 **12 ms**，30 fps 的机器却要 200 ms，16 倍差）。改为**在 tick 循环里消费**（`ticks++` 提前，`if (hitStopFrames > 0) { hitStopFrames--; continue; }`），于是无论渲染帧率多少，冻结的都是**精确 N 个逻辑帧**；这一格时间是被"吃掉"而不是丢弃，因此解冻既不快进也不丢时间 —— 顶部的早退分支与 `accumulator = 0f` 一并删除
+  - 待验收 6 条（时长与渲染帧率无关 / 双方一起冻结 / 解冻不瞬移 / 判定盒保持开着 / 空挥不顿帧 / 反复 Play 不累积）
+- ⬜ 第 3 步：击退（含 `EnemyMotor`）· ⬜ 第 4 步：生死（`Dead` 状态 + 死后关判定）
 
 ## 5. 待定决策（到对应阶段再定，届时附上每种选法的代价）
 
@@ -121,6 +126,7 @@
 | 状态计时的归属：各控制器各自计数 vs 由 `CombatActor` 持有 | ✅ **已定：`CombatActor.StateFrames`**（阶段 3）—— 纪律 #3「状态唯一来源」的必然延伸，且顿帧自动冻结 |
 | 命中链路的参数形态：传 `float damage` + `int hitStunFrames` vs 传整个 `AttackData` | ✅ **已定：传 `AttackData`**（阶段 3）—— 阶段 8 相杀要判断"招式身份"（轻/重/特殊），按数值传参每加一个效果都得改签名 |
 | 硬直期间的移动：照常能动 vs 锁住 | ✅ **已定：锁住水平位移、重力照常**（阶段 3）—— `PlayerMotor` 读 `CombatActor.State`，`Hit` / `Dead` 时不 `Move()` |
+| 顿帧时长的计量单位：渲染帧 vs 逻辑帧 | ✅ **已定：逻辑帧**（阶段 3 第 2 步）—— 按渲染帧计时会让"6 帧"在 483 fps 的机器上只有 12 ms、在 30 fps 的机器上 200 ms（16 倍漂移）；改为在 tick 循环里消费后与渲染帧率完全无关 |
 | 表现层引入时机：边做机制边接模型/动画 vs 逻辑优先、表现后置 | ✅ **已定：逻辑优先，表现后置到阶段 11**（阶段 2）—— 帧数表在阶段 5/6/8 还会变动，现在做动画对表等于白干；当前只加「零资源反馈」（Gizmos 判定可视化 + 朝向指示物） |
 | GP / 极限闪避成功后「回耐」与「一闪」的关系 | 阶段 6 |
 | 一闪的定位与消耗（是否消耗气刃） | 阶段 6–7 |
@@ -141,7 +147,8 @@
 | 命中未扣血（`AttackHitbox` 只有日志，还没有 `Hurtbox` 与结算） | ✅ 已解决（阶段 2 第 3 步：经 `CombatResolver` → `CombatActor.TakeDamage`） |
 | 无 Tags/Layers 定义（Player / Enemy / Hitbox / Hurtbox） | ✅ 已解决（阶段 2 第 1 步） |
 | 「攻击」输入仍直读 `Mouse.current`，未使用 `InputSystem_Actions` 的 `Attack` Action | 4 |
-| `AttackData.cs` 的 `menuName` 拼写为 `ComboHit/AttackDate` | 任意 |
+| `AttackData.cs` 的 `menuName` 拼写为 `ComboHit/AttackDate` | ✅ 已解决（阶段 3 第 2 步：改为 `ComboHit/AttackData`） |
+| 脚本被编辑器存成 GBK（`AttackData.cs` 加中文 `Tooltip` 后成为第 4 个 GBK 文件，`read` 报 invalid UTF-8） | ✅ 已解决（阶段 3 第 2 步：转 UTF-8 无 BOM；发现手段 = `read` 工具直接报错 / 严格 UTF-8 解码校验） |
 | 木桩 Prefab 沿用 `Enemy` 命名，与规划里的 `TrainingDummy` 不一致 | 4 |
 | 无 `.asmdef` 分层；`Scripts/Input` 仍为空目录 | 1–4 |
 | 项目内行尾混用（`PlayerMotor.cs` 全 LF、`CombatActor.cs` 前 17 行 LF 之后 CRLF、其余 CRLF），建议加 `.gitattributes` 统一 | 任意（2026-10-12 踩坑：按"统一 CRLF"重写产生 51 行 / 126 行**假 diff**；改文件前先 `git ls-files --eol`，按各文件自身行尾写，禁止全局归一化） |
@@ -150,6 +157,12 @@
 
 ## 7. 变更记录
 
+- **2026-10-12 · 阶段 3 第 2 步（顿帧接命中）**
+  - `AttackData.hitStopFrames`（`OnValidate` 夹 ≥ 0）+ 4 个资产实填 4 / 6 / 10 / 6；`CombatResolver.ResolveHit` 调 `CombatClock.RequestHitStop(attack.hitStopFrames)`（顿帧属于"这次命中"，不属于任何一方）
+  - **修掉计时单位 bug**：`CombatClock` 的冻结从"`Update` 里每渲染帧扣 1"改为"在 tick 循环里按逻辑帧消费" —— 原实现下本机 483 fps 时 6 帧顿帧只有 12 ms（16 倍漂移），改后与渲染帧率无关
+  - `AttackData.cs` 由 GBK 转 UTF-8 无 BOM（第 4 个 GBK 文件，来源：编辑器加中文 `Tooltip` 时按 GBK 保存）；顺带修 `menuName` 拼写 `ComboHit/AttackDate` → `ComboHit/AttackData`
+  - HUD 的 `enemy` 引用已按纪律 #9 重新从 **Hierarchy** 接线：场景里现在是本地 stripped ID `&3851966603847174561` + 对应 stripped 块（`m_CorrespondingSourceObject` 指向 `Enemy.prefab` 内的 `EnemyCombat`），不再指向 Prefab 资产
+  - 待验收：6 条手感项，含"把 `Attack_Enemy.hitStopFrames` 临时改 60 → 整整 1 秒全场入定"的判定实验
 - **2026-10-12 · 阶段 3 第 1 步完成（受击硬直）**
   - `AttackData.hitStunFrames`（4 个资产实填 10 / 14 / 20 / 12）+ `CombatActor.ReceiveHit(AttackData)` / `LastHit` + `CombatResolver.ResolveHit(attacker, defender, attack)`（改传整个招式资产）+ `AttackHitbox.Activate(AttackData)`
   - 两个控制器新增 `Hit` 分支 `UpdateHit()`（每帧幂等收刀 / 清输入缓冲 / 清 `comboStep`）；`PlayerMotor` 在 `Hit` / `Dead` 期间锁水平位移；`CombatDebugHUD` 显示 `HIT` 阶段并改显示"打中我的那一招"

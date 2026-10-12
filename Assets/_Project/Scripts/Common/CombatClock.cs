@@ -36,23 +36,23 @@ public class CombatClock : MonoBehaviour
 
     private void Update()
     {
-        // 顿帧：整帧丢弃 —— 不推进 Frame、不广播 OnTick、清空累加器
-        if (hitStopFrames > 0)
-        {
-            hitStopFrames--;
-            accumulator = 0f;   // 不丢累加器的话，解冻瞬间会连补十几帧，看着像瞬移
-            return;
-        }
-
         accumulator += Time.deltaTime;
 
         int ticks = 0;
         while (accumulator >= TickDelta && ticks < MaxTicksPerFrame)
         {
             accumulator -= TickDelta;
+            ticks++;
+
+            // 顿帧：这一格时间被"吃掉"，但既不推进 Frame 也不广播 —— 全场入定
+            if (hitStopFrames > 0)
+            {
+                hitStopFrames--;
+                continue;
+            }
+
             Frame++;
             OnTick?.Invoke(Frame);
-            ticks++;
         }
 
         if (ticks >= MaxTicksPerFrame) accumulator = 0f;
