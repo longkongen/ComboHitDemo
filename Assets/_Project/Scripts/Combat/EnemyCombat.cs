@@ -11,7 +11,7 @@ public class EnemyCombat : MonoBehaviour
     [SerializeField] private AttackData attack;      // 木桩只有一招
     [SerializeField] private int idleFrames = 90;    // 两次挥刀之间的间隔（逻辑帧，90 = 1.5 秒）
 
-    private int elapsedFrames;   // 「当前状态内」已经过了几帧（ChangeState 时归零）
+    // 状态内计时由 CombatActor.StateFrames 统一派生，这里不再自己数帧
 
     private void Awake()
     {
@@ -30,7 +30,7 @@ public class EnemyCombat : MonoBehaviour
         // 被打死了就躺平：阶段 3 会把这里做成正式的状态迁移
         if (actor.IsDead)
         {
-            if (actor.State != CombatState.Dead) ChangeState(CombatState.Dead);
+            if (actor.State != CombatState.Dead) actor.SetState(CombatState.Dead);
             return;
         }
 
@@ -44,44 +44,35 @@ public class EnemyCombat : MonoBehaviour
 
     private void UpdateIdle()
     {
-        elapsedFrames++;
-        if (elapsedFrames >= idleFrames)      // 节拍到了就抬手
+        if (actor.StateFrames >= idleFrames)   // 节拍到了就抬手
         {
             Debug.Log($"木桩进入攻击: {attack.attackName}（起手 {attack.startupFrames} 帧）");
-            ChangeState(CombatState.Attack);
+            actor.SetState(CombatState.Attack);
         }
     }
 
     private void UpdateAttack()
     {
-        elapsedFrames++;
-
-        if (elapsedFrames == attack.ActiveStartFrames)   // 起手结束那一帧：开判定
+        if (actor.StateFrames == attack.ActiveStartFrames)   // 起手结束那一帧：开判定
         {
-            Debug.Log($"木桩进入 Active（第 {elapsedFrames} 帧）");
-            attackHitbox.Activate(attack.damage);        // ← 注意这里日志在 Activate 之前
+            Debug.Log($"木桩进入 Active（第 {actor.StateFrames} 帧）");
+            attackHitbox.Activate(attack.damage);            // ← 注意这里日志在 Activate 之前
         }
 
-        if (elapsedFrames >= attack.ActiveEndFrames)     // 判定窗口结束：关判定并收招
+        if (actor.StateFrames >= attack.ActiveEndFrames)     // 判定窗口结束：关判定并收招
         {
             attackHitbox.Deactivate();
-            ChangeState(CombatState.Recovery);
+            actor.SetState(CombatState.Recovery);
         }
     }
 
     private void UpdateRecovery()
     {
-        elapsedFrames++;
-        if (elapsedFrames >= attack.recoveryFrames) ChangeState(CombatState.Idle);
+        if (actor.StateFrames >= attack.recoveryFrames) actor.SetState(CombatState.Idle);
     }
 
-    private void ChangeState(CombatState next)
-    {
-        actor.SetState(next);
-        elapsedFrames = 0;      // 唯一的计时复位点（和 PlayerCombat 一样的规矩）
-    }
-
+    // ===== 调试用只读快照（与 PlayerCombat 对称）：不参与战斗逻辑，只给 CombatDebugHUD 看 =====
     public CombatActor Actor => actor;
     public AttackData CurrentAttack => attack;
-    public int ElapsedFrames => elapsedFrames;
+    public int ElapsedFrames => actor.StateFrames;
 }

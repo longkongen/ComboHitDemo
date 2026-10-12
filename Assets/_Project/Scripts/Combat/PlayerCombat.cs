@@ -16,9 +16,8 @@ public class PlayerCombat : MonoBehaviour
     private bool attackBuffered;
     private int bufferFramesLeft;
 
-    // 当前状态内的相对帧数：每 tick 恰好 +1，是本状态机唯一的计时来源
-    // 注意它统计的是“进入当前状态之后过了几帧”，ChangeState 时归零
-    private int elapsedFrames;
+    // 状态内帧数不在本地自增了：由 CombatActor.StateFrames 统一派生
+    // （状态由 CombatActor 独占持有，计时必须跟状态走，否则外部改写状态时会对不上）
 
     private int comboStep;
     private AttackData currentAttack;
@@ -64,11 +63,10 @@ public class PlayerCombat : MonoBehaviour
     }
 
     // ===== 调试用只读快照：不参与战斗逻辑，只给 CombatDebugHUD 看 =====
+    public CombatActor Actor => actor;
     public CombatState State => (actor != null) ? actor.State : CombatState.Idle;
     public AttackData CurrentAttack => currentAttack;
-    public int ElapsedFrames => elapsedFrames;
-
-    public CombatActor Actor => actor;
+    public int ElapsedFrames => actor.StateFrames;
 
     // 纪律：渲染帧只负责采样输入，逻辑帧才推进状态机（CombatClock 的执行顺序是 order 1000）
     private void OnEnable()
@@ -104,10 +102,11 @@ public class PlayerCombat : MonoBehaviour
         }
     }
 
+    // 这个包装不只是转发：还要打日志、并在进入攻击时做一次收刀保险。
+    // 计时复位不在这里 —— 它跟着 SetState 走，由 CombatActor 独占（StateFrames）
     private void ChangeState(CombatState next)
     {
         actor.SetState(next);
-        elapsedFrames = 0;      // 唯一的计时复位点：每次迁移都从第 0 帧重新开始
 
         switch (next)
         {
@@ -144,22 +143,20 @@ public class PlayerCombat : MonoBehaviour
     private void StartAttack()
     {
         currentAttack = combo[comboStep - 1];
-        ChangeState(CombatState.Attack);        // 内部会把 elapsedFrames 归零
+        ChangeState(CombatState.Attack);        // 内部走 actor.SetState，计时由 StateFrames 派生
     }
 
     private void UpdateAttack()
     {
-        elapsedFrames++;
-
         // 跨进判定期的那一帧：开判定（帧化后可以精确用 == 定位某一帧，秒计时做不到）
-        if (elapsedFrames == currentAttack.ActiveStartFrames)
+        if (actor.StateFrames == currentAttack.ActiveStartFrames)
         {
             attackHitbox.Activate(currentAttack.damage);
-            Debug.Log($"进入 Active（第 {elapsedFrames} 帧）");
+            Debug.Log($"进入 Active（第 {actor.StateFrames} 帧）");
         }
 
         // 判定期结束的那一帧：关判定并进收招
-        if (elapsedFrames >= currentAttack.ActiveEndFrames)
+        if (actor.StateFrames >= currentAttack.ActiveEndFrames)
         {
             attackHitbox.Deactivate();
             ChangeState(CombatState.Recovery);
@@ -168,9 +165,7 @@ public class PlayerCombat : MonoBehaviour
 
     private void UpdateRecovery()
     {
-        elapsedFrames++;
-
-        if (elapsedFrames >= currentAttack.recoveryFrames)
+        if (actor.StateFrames >= currentAttack.recoveryFrames)
         {
             if (attackBuffered && comboStep < maxCombo)
             {

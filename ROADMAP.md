@@ -1,7 +1,7 @@
 # ComboHitDemo · 开发路线图
 
 > 微高速动作 ACT Demo（Unity 6 / C#）：**连招 · GP · 极限闪避 · 相杀拼刀 · QTE 处决**
-> 最后更新：2026-10-10（阶段 2 第 4 步完成 —— 木桩会挥刀；表现层决策：后置到阶段 11）
+> 最后更新：2026-10-12（阶段 2 完成 —— HUD 显示双方 HP；阶段 3 启动，第 0 步完成 —— 状态计时归位 + 顿帧 + PlayerMotor 帧化）
 
 ---
 
@@ -49,8 +49,8 @@
 |---|---|---|---|---|
 | **0. 地基收尾** | 工程干净、可回滚、可反复实验 | 能 Play、WASD 移动、按攻击键有反馈；已提交基线 | S | ✅ 完成 |
 | **1. 招式时间轴** | 攻击不再是硬编码秒数，而是「起手/判定/收招」可调 | 在 Inspector 改数值手感立刻变；能看到判定帧 | S–M | ✅ 完成 |
-| **2. 判定层 + 木桩敌人** | 第一次真正「打中」并掉血 | 攻击能打掉木桩血；木桩挥刀能打到我 | M | 🟡 进行中 |
-| **3. 受击反馈与生死** | 挨打有硬直、击退、顿帧、能死 | 能打死木桩，也能被打死 | S–M | ⬜ |
+| **2. 判定层 + 木桩敌人** | 第一次真正「打中」并掉血 | 攻击能打掉木桩血；木桩挥刀能打到我 | M | ✅ 完成 |
+| **3. 受击反馈与生死** | 挨打有硬直、击退、顿帧、能死 | 能打死木桩，也能被打死 | S–M | 🟡 进行中 |
 | **4. 连招系统** | 三段连起来且「乱按不串招」 | 连按顺畅出 1→2→3；停手回 Idle | M | ⬜ |
 | **5. 防御三件套** | 闪避 / 极限闪避 / GP 都能用且回耐 | 闪避能穿攻击；极限闪避有提示并回耐；GP 能弹开并回耐 | M–L | ⬜ |
 | **6. 一闪** | GP/极限闪避成功 → 反击 | GP 成功后按攻击键出一闪，直接打掉一大截血 | M | ⬜ |
@@ -79,14 +79,25 @@
 - ✅ **第 4 步**：`CombatDebugHUD`（`Scripts/Common/`）调试 HUD —— 招式名 / 阶段 / 当前帧 / 窗口边界，全 ASCII（IMGUI 字体无中文字形）；`PlayerCombat` 暴露只读 `State` / `CurrentAttack` / `ElapsedFrames`
 - 排查记录：HUD 恒显示 Idle 是因为 `player` 字段引用了 **Project 窗口的 Prefab 资产**（不再运行的模板，字段永远是初始值）；现已在 HUD 内加自诊断（`!scene.IsValid()` → "Prefab ASSET" 提示）
 
-**阶段 2（进行中）**
+**阶段 2（已完成）**
 - ✅ 决策：命中检测 = 每逻辑帧主动 `Physics.OverlapBox` 查询；木桩 = 会规律挥刀的假人（与玩家共用 `AttackData` 与判定帧开关）
 - ✅ 第 1 步：User Layer `Player`(8) / `Enemy`(9) / `Hitbox`(10) / `Hurtbox`(11) 建好并归位（两个 Prefab + 场景实例）
 - ✅ 第 2 步：`Hurtbox`（`owner` + `Awake` 校验）+ `CombatActor.TakeDamage` / `Hp` / `IsDead`
 - ✅ 第 3 步：`CombatResolver`（唯一仲裁口）+ `AttackHitbox` 改为主动查询（`OverlapBoxNonAlloc` + `HashSet` 去重 + `Owner` 自伤过滤 + `SyncTransforms`）；实测一套连招伤害 10/15/25 全对，一次挥击只结算一次
 - ✅ 第 4 步：木桩 Prefab（沿用了 `Enemy` 这个名字）+ `EnemyCombat` + `Data/Attack_Enemy.asset`（`Slash_Enemy`：起手 18 / 判定 4 / 收招 26 / 伤害 8，配 `idleFrames = 90` → 一个循环 138 逻辑帧 ≈ 2.3 秒一次挥刀）—— 与玩家共用 `AttackData` / 判定帧 / 仲裁口；实测同屏两个 `AttackHitbox` 各自独立去重、双方各自扣血（木桩 8 点 ×3 打玩家 92→84→76；玩家 10/15/10 打木桩 90→75→65，连招正确复位）
-- ⬜ 第 5 步：HUD 显示双方 HP，验收
+- ✅ 第 5 步：`CombatDebugHUD` 显示双方 HP / 状态 / 招式 / 阶段 / 帧数 / 逻辑 tick 三行；字段为空时 `Awake` 用 `FindAnyObjectByType` 自动查找并打一行提示（不再依赖手拖引用）
+- 验收实测（`Logs/Editor.log` 1584 行）：`error CS` 0、`Exception` 0、`[CombatDebugHUD]` 1 行、木桩 13 次挥刀（**没有停摆**）、`进入攻击` 21 次、`进入 Idle` 4 次、`被击倒` 1 次 ⇒ 此前"木桩静默"疑点结案（当时多半是木桩已被打死或玩家停手）
+- 结论：**判定层 + 木桩敌人全部跑通，阶段 2 完成**
 - ✅ 决策：表现层后置 —— 阶段 2–10 只做判定与规则，当前仅加「零资源反馈」（`AttackHitbox` / `Hurtbox` 的 `OnDrawGizmos` 调试可视化 + 朝向指示物），模型/动画留到阶段 11
+
+**阶段 3（进行中）**
+- ✅ 决策：**A1** 硬直帧数进 `AttackData.hitStunFrames`（每招式不同）；**B1** 顿帧冻结整个逻辑时钟（不广播 tick + 丢累加器）；**C1** 现在就帧化 `PlayerMotor`，木桩配极简 `EnemyMotor`；**D1** `elapsedFrames` 迁入 `CombatActor` 改名 `StateFrames`
+- ✅ 第 0 步：计时归位 + 顿帧开关 + `PlayerMotor` 帧化
+  - `CombatActor.stateEnteredFrame` + `public int StateFrames => CombatClock.Frame - stateEnteredFrame;`（**差值式**，`SetState` 内唯一复位）。刻意**不用**"订阅 `OnTick` 自增"：`CombatActor` 与控制器订阅同一个事件，谁先被通知只由组件顺序决定，先后颠倒就会让整条帧数表错一帧；差值式没有这个隐患，而且顿帧期间 `Frame` 不增 ⇒ 所有状态计时**自动冻结**
+  - `CombatClock.hitStopFrames` + `public static void RequestHitStop(int frames)`（取 max 不叠加，叠加会导致连击越打越卡）+ `Update` 顶部冻结分支（**必须放在 `accumulator += Time.deltaTime` 之前**，分支内 `hitStopFrames--; accumulator = 0f; return;`）
+  - `PlayerMotor` 改「`Update` 只采样输入 / `OnCombatTick` 才位移」，步长一律 `CombatClock.TickDelta`；`PlayerCombat` / `EnemyCombat` 删除各自的计时字段，改读 `actor.StateFrames`
+- ⬜ 第 1 步：受击硬直（`AttackData.hitStunFrames` + `CombatActor.ReceiveHit` + 控制器 `Hit` 分支）
+- ⬜ 第 2 步：顿帧接命中 · ⬜ 第 3 步：击退（含 `EnemyMotor`）· ⬜ 第 4 步：生死（`Dead` 状态 + 死后关判定）
 
 ## 5. 待定决策（到对应阶段再定，届时附上每种选法的代价）
 
@@ -96,6 +107,10 @@
 | 招式数据形态：`ScriptableObject` 资产 vs 代码内 `new` | ✅ **已定：每招式一个 SO 资产**（阶段 1） |
 | 命中检测方式：物理 trigger 事件 vs 每逻辑帧主动 `OverlapBox` 查询 | ✅ **已定：每逻辑帧主动 `OverlapBox` 查询**（阶段 2）—— 判定必须发生在自己的时钟里，否则阶段 8「同一逻辑帧相交」无从谈起 |
 | 木桩敌人形态：纯静止靶子 vs 会规律挥刀的假人 | ✅ **已定：会规律挥刀的假人**（阶段 2）—— 与玩家共用 `AttackData` 与判定帧开关，阶段 5/6/8 直接在它身上试 |
+| 硬直时长来源：写进 `AttackData` vs 全局常量 | ✅ **已定：写进 `AttackData.hitStunFrames`**（阶段 3）—— 每招式的硬直本来就该不同（重招打退更久） |
+| 顿帧的作用范围：冻结整个逻辑时钟 vs 只暂停参与双方 | ✅ **已定：冻结整个逻辑时钟**（阶段 3）—— 实现最简、语义最直白（拳拳到肉时全场入定），代价是顿帧期间 `OnTick` 不广播，所有系统一起冻结 |
+| `PlayerMotor` 的帧化时机：现在 vs 等击退需求出现再改 | ✅ **已定：现在就帧化**（阶段 3）—— 击退必须走逻辑帧；两套时基混用一定会出偏移，而且越晚改越贵 |
+| 状态计时的归属：各控制器各自计数 vs 由 `CombatActor` 持有 | ✅ **已定：`CombatActor.StateFrames`**（阶段 3）—— 纪律 #3「状态唯一来源」的必然延伸，且顿帧自动冻结 |
 | 表现层引入时机：边做机制边接模型/动画 vs 逻辑优先、表现后置 | ✅ **已定：逻辑优先，表现后置到阶段 11**（阶段 2）—— 帧数表在阶段 5/6/8 还会变动，现在做动画对表等于白干；当前只加「零资源反馈」（Gizmos 判定可视化 + 朝向指示物） |
 | GP / 极限闪避成功后「回耐」与「一闪」的关系 | 阶段 6 |
 | 一闪的定位与消耗（是否消耗气刃） | 阶段 6–7 |
@@ -110,7 +125,7 @@
 | `attackActive` 一个字段承担两个语义（startup 结束 / 处于判定帧） | ✅ 已解决（阶段 1 第 3 步，改由帧数派生） |
 | `FramesToSeconds` 临时桥接（第 3 步删除，即为帧化完成的标志） | ✅ 已解决（阶段 1 第 3 步） |
 | `AttackHitbox.damage` 仍是 `public` 字段（应改 `private` + 只读属性） | ✅ 已解决（阶段 2，已改为 `private float damage`） |
-| `PlayerMotor` 仍在 `Update` 里读输入并位移，未走逻辑帧 | 2–3 |
+| `PlayerMotor` 未走逻辑帧（`Update` 里直接位移，与自建逻辑帧两套时基混用） | ✅ 已解决（阶段 3 第 0 步） |
 | `AttackHitbox` 缺 Layer/Tag 过滤（会打到自己与地面） | ✅ 已解决（阶段 2 第 3 步：`LayerMask.GetMask("Hurtbox")` + `Owner` 身份过滤） |
 | `AttackHitbox` 缺"同一次挥击只结算一次"的去重 | ✅ 已解决（阶段 2 第 3 步：实例级 `HashSet<Hurtbox>`，`Activate` 时清空） |
 | 命中未扣血（`AttackHitbox` 只有日志，还没有 `Hurtbox` 与结算） | ✅ 已解决（阶段 2 第 3 步：经 `CombatResolver` → `CombatActor.TakeDamage`） |
@@ -119,11 +134,18 @@
 | `AttackData.cs` 的 `menuName` 拼写为 `ComboHit/AttackDate` | 任意 |
 | 木桩 Prefab 沿用 `Enemy` 命名，与规划里的 `TrainingDummy` 不一致 | 4 |
 | 无 `.asmdef` 分层；`Scripts/Input` 仍为空目录 | 1–4 |
-| 项目内行尾混用（部分文件 CRLF、部分 LF），建议加 `.gitattributes` 统一 | 任意 |
+| 项目内行尾混用（`PlayerMotor.cs` 全 LF、`CombatActor.cs` 前 17 行 LF 之后 CRLF、其余 CRLF），建议加 `.gitattributes` 统一 | 任意（2026-10-12 踩坑：按"统一 CRLF"重写产生 51 行 / 126 行**假 diff**；改文件前先 `git ls-files --eol`，按各文件自身行尾写，禁止全局归一化） |
 | `TutorialInfo/`、`Readme.asset` 为模板残留 | 任意 |
 
 ## 7. 变更记录
 
+- **2026-10-12 · 阶段 2 完成 + 阶段 3 第 0 步完成**
+  - 阶段 2 第 5 步：`CombatDebugHUD` 扩成三行（双方 HP / 状态 / 招式 / 阶段 / 帧数 + 逻辑 tick 计数）；`PlayerCombat` / `EnemyCombat` 各暴露只读 `Actor` / `CurrentAttack` / `ElapsedFrames`；HUD 的 `player` / `enemy` 未接线时 `Awake` 自动 `FindAnyObjectByType` 查找并打一行提示
+  - 修掉编译警告 `CS0618`：`FindFirstObjectByType` → `FindAnyObjectByType`（"First" 按 instanceID 排序，本工程禁用 Domain Reload 时 instanceID 跨 Play 持续增长 ⇒ 同一次编辑会话里第二次 Play 可能挑中不同对象）
+  - 阶段 3 第 0 步：`CombatActor.StateFrames`（差值式计时，`SetState` 内唯一复位）、`CombatClock.RequestHitStop(int)` + `Update` 顶部冻结分支（丢累加器 + 不广播 tick）、`PlayerMotor` 帧化（`Update` 只采样输入 / `OnCombatTick` 位移）、`PlayerCombat` / `EnemyCombat` 删除自有计时字段改读 `actor.StateFrames`
+  - **踩坑（行尾）**：仓库内 `PlayerMotor.cs` = LF、`CombatActor.cs` = mixed（1–17 行 LF、18 行起 CRLF）、其余 CRLF；按"统一 CRLF"重写造成 `CombatActor.cs` 51 行 / `PlayerMotor.cs` 126 行假 diff，`git checkout --` 还原后按各文件自身行尾分别写入才收敛（9/0 与 39/39）。**教训：改文件前先 `git ls-files --eol`**
+  - 另一课：`Select-String` 默认忽略大小写，查 `elapsedFrames` 会把属性 `ElapsedFrames` 算成残留（假阳性）
+  - 验收取证：`error CS` 0、`Exception` 0；DLL 二进制含 `RequestHitStop` / `StateFrames` / `stateEnteredFrame` / `hitStopFrames`；木桩 13 次挥刀无停摆 ⇒ 阶段 2「木桩静默」疑点结案
 - **2026-10-10 · 阶段 2 第 4 步完成（木桩会挥刀）**
   - 新增 `Assets/_Project/Scripts/Combat/EnemyCombat.cs`：木桩节拍状态机（`Idle` 90 帧 → `Attack` → `Recovery`，`ChangeState` 为唯一计时复位点），复用 `CombatClock` / `AttackData` / `AttackHitbox` / `CombatResolver`，是 `PlayerCombat` 的简化镜像
   - 新增 `Assets/_Project/Data/Attack_Enemy.asset`；`Assets/_Project/Prefabs/Enemy.prefab` 根物体挂 `EnemyCombat` 并接线 `actor` / `attackHitbox` / `attack` / `idleFrames`
