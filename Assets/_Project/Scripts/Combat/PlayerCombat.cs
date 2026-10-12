@@ -68,6 +68,8 @@ public class PlayerCombat : MonoBehaviour
     public AttackData CurrentAttack => currentAttack;
     public int ElapsedFrames => elapsedFrames;
 
+    public CombatActor Actor => actor;
+
     // 纪律：渲染帧只负责采样输入，逻辑帧才推进状态机（CombatClock 的执行顺序是 order 1000）
     private void OnEnable()
     {

@@ -80,4 +80,8 @@ public class EnemyCombat : MonoBehaviour
         actor.SetState(next);
         elapsedFrames = 0;      // 唯一的计时复位点（和 PlayerCombat 一样的规矩）
     }
+
+    public CombatActor Actor => actor;
+    public AttackData CurrentAttack => attack;
+    public int ElapsedFrames => elapsedFrames;
 }
