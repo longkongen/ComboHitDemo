@@ -1,7 +1,7 @@
 # ComboHitDemo · 开发路线图
 
 > 微高速动作 ACT Demo（Unity 6 / C#）：**连招 · GP · 极限闪避 · 相杀拼刀 · QTE 处决**
-> 最后更新：2026-10-12（阶段 2 完成 —— HUD 显示双方 HP；阶段 3 启动，第 0 步完成 —— 状态计时归位 + 顿帧 + PlayerMotor 帧化）
+> 最后更新：2026-10-12（阶段 3 进行中 —— 第 0 步计时归位 / 第 1 步受击硬直 / 第 2 步顿帧 / 第 3 步击退均已完成，只剩第 4 步生死）
 
 ---
 
@@ -105,12 +105,21 @@
   - 验收取证（`Logs/Editor.log`）：`[CombatActor] Player 进入硬直：Slash_Enemy（12 帧）` → `PlayerCombat:UpdateHit` → `进入 Idle`；`error CS` 0
   - 排查记录：用户报"受击后仍能移动" —— 实为 **12 逻辑帧 = 0.2 秒**，而木桩每 2.3 秒才挥一刀，且本阶段还没有顿帧/击退/视觉反馈，肉眼分辨不出；判定实验 = 把 `Attack_Enemy.hitStunFrames` 临时改 120
   - 已证实的事实：SO 资产 YAML 缺字段时运行期取 **C# 字段初始值**（`Attack_Enemy` 缺字段却打出 12 帧），不是取 0
-- 🟡 第 2 步：顿帧接命中（代码就绪，待手感验收）
+- ✅ 第 2 步：顿帧接命中（验收通过；用户于 2026-10-12 确认后进入第 3 步）
   - `AttackData.hitStopFrames`（`OnValidate` 夹 **≥ 0** —— 0 是合法语义"这一招不顿帧"；硬直才必须 ≥ 1）；4 个资产实填 **4 / 6 / 10 / 6**（Slash1 / Slash2 / Slash3 / Enemy = 67 / 100 / 167 / 100 ms @60Hz）
   - `CombatResolver.ResolveHit` 末尾加一行 `CombatClock.RequestHitStop(attack.hitStopFrames);` —— 顿帧属于"这次命中"而非任何一方；位置在所有守卫之后 ⇒ 空挥不顿帧、已死目标不顿帧、多次命中取 max 不叠加
   - **修掉一个真 bug（计时单位）**：`CombatClock` 原来的冻结是 `Update` 顶部 `hitStopFrames--`，即**每渲染帧扣 1** ⇒ 顿帧真实时长随渲染帧率漂移（本机 483 fps 时 `RequestHitStop(6)` 只有 **12 ms**，30 fps 的机器却要 200 ms，16 倍差）。改为**在 tick 循环里消费**（`ticks++` 提前，`if (hitStopFrames > 0) { hitStopFrames--; continue; }`），于是无论渲染帧率多少，冻结的都是**精确 N 个逻辑帧**；这一格时间是被"吃掉"而不是丢弃，因此解冻既不快进也不丢时间 —— 顶部的早退分支与 `accumulator = 0f` 一并删除
   - 待验收 6 条（时长与渲染帧率无关 / 双方一起冻结 / 解冻不瞬移 / 判定盒保持开着 / 空挥不顿帧 / 反复 Play 不累积）
-- ⬜ 第 3 步：击退（含 `EnemyMotor`）· ⬜ 第 4 步：生死（`Dead` 状态 + 死后关判定）
+- ✅ 第 3 步：击退 + `EnemyMotor`（验收通过）
+  - 规则：命中时给受击方一个「沿攻击者正前方、持续 N 个逻辑帧、总位移 D 米」的恒速推离。`AttackData.knockbackDistance`（米，`OnValidate` 夹 ≥ 0）+ `knockbackFrames`（帧，夹 ≥ 0；**0 是合法语义"这一招不击退"**，且此时不设速度、避免除零）；4 个资产实填 **0.4/8 · 0.7/10 · 1.4/14 · 0.5/10**（Slash1 / Slash2 / Slash3 / Enemy）
+  - 方向在 `CombatResolver.ResolveHit` 里算（只有这里同时握着攻守双方）：`attacker.transform.forward` 压平 y、归一化，`sqrMagnitude < 0.0001f` 时退回 `Vector3.forward`；然后 `defender.ReceiveHit(attack, knockbackDir)`
+  - `CombatActor` 持有击退状态，**用截止帧号而不是自减计数器**：`private Vector3 knockbackVelocity;`（米/秒）+ `private int knockbackEndFrame;` + `public Vector3 KnockbackVelocity => (CombatClock.Frame < knockbackEndFrame) ? knockbackVelocity : Vector3.zero;` —— 与 `StateFrames` 同款差值式：不新增订阅（不会重新引入组件顺序问题）、顿帧期间 `CombatClock.Frame` 不增 ⇒ **击退自动冻结**、没有任何需要重置的计数器
+  - 单位坑（写错会小 60 倍）：速度存**米/秒** = `距离 / (帧数 × TickDelta)`，移动方每帧再乘 `TickDelta`
+  - `PlayerMotor.OnCombatTick` = `if (canMove) Move();` → `ApplyKnockback();` → `ApplyGravity();` —— 击退**刻意放在输入锁之外**，否则 `Hit` / `Dead` 期间 `canMove == false` 会把击退一起挡掉；新建 `Assets/_Project/Scripts/EnemyMotor.cs`（不采样输入，只做被推 + 落地），`Enemy.prefab` 根加 `CharacterController`（Height 2 / Radius 0.5 / Center **(0,0,0)**，与 Player 逐字一致）并**删掉根上原有的 `CapsuleCollider`**（留着会与 CharacterController 重叠成两套碰撞体）
+  - **修掉一个编译阻塞**：`CombatActor.cs:30` 残留半截行 `Vector3 knockbackDirection` → `error CS1002: ; expected`，整工程无法编译（`Logs/Editor.log:17225`）
+  - 判定层不受影响：`AttackHitbox.cs:19` 用 `LayerMask.GetMask("Hurtbox")`，木桩新的 CharacterController 在 `Enemy`(9) 层，不会被当受击盒；场景两个 Prefab 实例均 `m_RemovedComponents: []`，没有指向已删 CapsuleCollider 的残留引用
+  - 验收 6 条：① 位移随招式变化（Slash1 ≈0.4 m / Slash3 ≈1.4 m）② 绕到侧面打 → 沿**攻击者面朝方向**推（不是两人连线）③ 顿帧期间双方不动、解冻后才开始退 ④ 自己被打中 → 被推，且推期间按 WASD 无效 ⑤ 连续两刀不叠加成两倍速 ⑥ 不穿模、反复 Play 3 次一致
+- ⬜ 第 4 步：生死（`Dead` 状态真正切换 + 死后关判定 + 木桩停手）
 
 ## 5. 待定决策（到对应阶段再定，届时附上每种选法的代价）
 
@@ -127,6 +136,9 @@
 | 命中链路的参数形态：传 `float damage` + `int hitStunFrames` vs 传整个 `AttackData` | ✅ **已定：传 `AttackData`**（阶段 3）—— 阶段 8 相杀要判断"招式身份"（轻/重/特殊），按数值传参每加一个效果都得改签名 |
 | 硬直期间的移动：照常能动 vs 锁住 | ✅ **已定：锁住水平位移、重力照常**（阶段 3）—— `PlayerMotor` 读 `CombatActor.State`，`Hit` / `Dead` 时不 `Move()` |
 | 顿帧时长的计量单位：渲染帧 vs 逻辑帧 | ✅ **已定：逻辑帧**（阶段 3 第 2 步）—— 按渲染帧计时会让"6 帧"在 483 fps 的机器上只有 12 ms、在 30 fps 的机器上 200 ms（16 倍漂移）；改为在 tick 循环里消费后与渲染帧率完全无关 |
+| 击退的运动模型：恒速推 N 帧 vs 冲量 + 每帧衰减 | ✅ **已定：恒速推 N 帧**（阶段 3 第 3 步）—— 距离 ÷ 帧数 = 每帧步长，推完即停、帧数精确可验收；缓动曲线留到阶段 11 手感打磨，不提前复杂化 |
+| 击退方向：攻击者正前方 vs 攻击者→受击者连线 | ✅ **已定：攻击者正前方**（阶段 3 第 3 步）—— 侧面打也沿朝向推，连招落点可预测，且不会在两人重合时出现零向量退化 |
+| 木桩的移动方式：加 `CharacterController` + `EnemyMotor` vs 直接改 `transform.position` | ✅ **已定：加 CharacterController**（阶段 3 第 3 步）—— 与玩家共用同一套移动规则、有碰撞、有重力，将来给木桩加走位不必重做；代价是 Prefab 要删掉根上原来的 CapsuleCollider |
 | 表现层引入时机：边做机制边接模型/动画 vs 逻辑优先、表现后置 | ✅ **已定：逻辑优先，表现后置到阶段 11**（阶段 2）—— 帧数表在阶段 5/6/8 还会变动，现在做动画对表等于白干；当前只加「零资源反馈」（Gizmos 判定可视化 + 朝向指示物） |
 | GP / 极限闪避成功后「回耐」与「一闪」的关系 | 阶段 6 |
 | 一闪的定位与消耗（是否消耗气刃） | 阶段 6–7 |
@@ -154,9 +166,17 @@
 | 项目内行尾混用（`PlayerMotor.cs` 全 LF、`CombatActor.cs` 前 17 行 LF 之后 CRLF、其余 CRLF），建议加 `.gitattributes` 统一 | 任意（2026-10-12 踩坑：按"统一 CRLF"重写产生 51 行 / 126 行**假 diff**；改文件前先 `git ls-files --eol`，按各文件自身行尾写，禁止全局归一化） |
 | `TutorialInfo/`、`Readme.asset` 为模板残留 | 任意 |
 | 招式资产缺 `hitStunFrames` 字段（运行期会取 C# 初始值，设计值与实际值可能不一致） | ✅ 已解决（阶段 3 第 1 步：4 个资产实填 10 / 14 / 20 / 12） |
+| `EnemyMotor.cs` 与 `PlayerMotor.cs` 是两份几乎相同的代码（重力 + 击退） | 4–7（等木桩需要走位 / 冲刺时再抽公共基类或独立 `Motor` 组件，过早抽象会把两者不同的输入来源硬拧到一起） |
 
 ## 7. 变更记录
 
+- **2026-10-12 · 阶段 3 第 3 步（击退 + `EnemyMotor`）**
+  - `AttackData` 加 `knockbackDistance` / `knockbackFrames`（4 个资产实填 0.4/8 · 0.7/10 · 1.4/14 · 0.5/10）；`CombatResolver` 算击退方向并 `defender.ReceiveHit(attack, knockbackDir)`；`CombatActor` 用 `knockbackEndFrame` 截止帧号 + `KnockbackVelocity` 差值属性（顿帧自动冻结）；`PlayerMotor` 新增 `ApplyKnockback()` 并放在输入锁之外；新建 `EnemyMotor.cs`
+  - `Enemy.prefab` 根加 `CharacterController`（Height 2 / Radius 0.5 / Center (0,0,0)）+ `EnemyMotor`，并**删掉根 CapsuleCollider**（否则两套碰撞体重叠）
+  - 修掉编译阻塞：`CombatActor.cs` 里残留的半截行（`error CS1002: ; expected`）
+  - 顺手清理：`PlayerMotor.cs` 行尾 w/mixed → LF；`PlayerCombat.cs` 删掉又冒出来的无用 `using UnityEngine.InputSystem.XR;`
+  - 三次决策落定（见 §5）：恒速推 N 帧 / 沿攻击者正前方 / 木桩用 CharacterController
+  - 验收 6 条已由用户确认通过（2026-10-12）
 - **2026-10-12 · 阶段 3 第 2 步（顿帧接命中）**
   - `AttackData.hitStopFrames`（`OnValidate` 夹 ≥ 0）+ 4 个资产实填 4 / 6 / 10 / 6；`CombatResolver.ResolveHit` 调 `CombatClock.RequestHitStop(attack.hitStopFrames)`（顿帧属于"这次命中"，不属于任何一方）
   - **修掉计时单位 bug**：`CombatClock` 的冻结从"`Update` 里每渲染帧扣 1"改为"在 tick 循环里按逻辑帧消费" —— 原实现下本机 483 fps 时 6 帧顿帧只有 12 ms（16 倍漂移），改后与渲染帧率无关

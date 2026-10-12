@@ -20,6 +20,13 @@ public class CombatActor : MonoBehaviour
     /// <summary>当前状态已经持续了几个逻辑帧（刚进入的那一帧为 0）。</summary>
     public int StateFrames => CombatClock.Frame - stateEnteredFrame;
 
+    private Vector3 knockbackVelocity;      // 米/秒
+    private int knockbackEndFrame;
+
+    public Vector3 KnockbackVelocity =>
+        (CombatClock.Frame < knockbackEndFrame) ? knockbackVelocity : Vector3.zero;
+
+    
     public void SetState(CombatState newState)
     {
         state = newState;
@@ -53,24 +60,25 @@ public class CombatActor : MonoBehaviour
     /// <summary>
     /// 被命中：扣血 + 进入硬直。硬直时长由“打中我的那一招”决定
     /// </summary>
-    public void ReceiveHit(AttackData attack)
+    public void ReceiveHit(AttackData attack, Vector3 knockbackDirection)
     {
         if (IsDead) return;
         if (attack == null) return;
         TakeDamage(attack.damage);
         if (IsDead) return;
+        lastHit = attack;
+        if (attack.knockbackFrames > 0 && attack.knockbackDistance > 0f)
+        {
+            Vector3 dir = knockbackDirection;
+            dir.y = 0f;
+            if (dir.sqrMagnitude > 0.0001f)
+            {
+                dir.Normalize();
+                knockbackVelocity = dir * (attack.knockbackDistance / (attack.knockbackFrames * CombatClock.TickDelta));
+                knockbackEndFrame = CombatClock.Frame + attack.knockbackFrames;
+            }
+        }
         SetState(CombatState.Hit);
         Debug.Log($"[CombatActor] {name} 进入硬直：{attack.attackName}（{attack.hitStunFrames} 帧）", this);
-    }
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
-    {
-        
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-        
     }
 }

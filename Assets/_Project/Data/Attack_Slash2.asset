@@ -19,3 +19,5 @@ MonoBehaviour:
   recoveryFrames: 13
   hitStunFrames: 14
   hitStopFrames: 6
+  knockbackDistance: 0.7
+  knockbackFrames: 10

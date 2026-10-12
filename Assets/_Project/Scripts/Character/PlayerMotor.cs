@@ -50,7 +50,8 @@ public class PlayerMotor : MonoBehaviour
     {
         // 硬直 / 死亡期间不能水平移动；重力照常加，否则空中被打中会钉在天上
         bool canMove = (actor == null) || (actor.State != CombatState.Hit && actor.State != CombatState.Dead);
-        if (canMove) Move();
+        if (canMove) Move();   // 输入位移：Hit / Dead 期间被锁
+        ApplyKnockback();      // 击退：不受输入锁限制（这正是击退的意义）
         ApplyGravity();
     }
 
@@ -68,5 +69,12 @@ public class PlayerMotor : MonoBehaviour
         }
         velocity.y += gravity * CombatClock.TickDelta;
         controller.Move(velocity * CombatClock.TickDelta);
+    }
+    private void ApplyKnockback()
+    {
+        if (actor == null) return;
+        Vector3 kb = actor.KnockbackVelocity;
+        if (kb == Vector3.zero) return;
+        controller.Move(kb * CombatClock.TickDelta);
     }
 }
