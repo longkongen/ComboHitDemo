@@ -1,7 +1,7 @@
 # ComboHitDemo · 开发路线图
 
 > 微高速动作 ACT Demo（Unity 6 / C#）：**连招 · GP · 极限闪避 · 相杀拼刀 · QTE 处决**
-> 最后更新：2026-10-12（阶段 3 进行中 —— 第 0 步计时归位 / 第 1 步受击硬直 / 第 2 步顿帧 / 第 3 步击退均已完成，只剩第 4 步生死）
+> 最后更新：2026-10-12（**阶段 3 完成** —— 受击硬直 / 顿帧 / 击退 / 生死四步全部落地；阶段 4 连招系统进行中）
 
 ---
 
@@ -50,8 +50,8 @@
 | **0. 地基收尾** | 工程干净、可回滚、可反复实验 | 能 Play、WASD 移动、按攻击键有反馈；已提交基线 | S | ✅ 完成 |
 | **1. 招式时间轴** | 攻击不再是硬编码秒数，而是「起手/判定/收招」可调 | 在 Inspector 改数值手感立刻变；能看到判定帧 | S–M | ✅ 完成 |
 | **2. 判定层 + 木桩敌人** | 第一次真正「打中」并掉血 | 攻击能打掉木桩血；木桩挥刀能打到我 | M | ✅ 完成 |
-| **3. 受击反馈与生死** | 挨打有硬直、击退、顿帧、能死 | 能打死木桩，也能被打死 | S–M | 🟡 进行中 |
-| **4. 连招系统** | 三段连起来且「乱按不串招」 | 连按顺畅出 1→2→3；停手回 Idle | M | ⬜ |
+| **3. 受击反馈与生死** | 挨打有硬直、击退、顿帧、能死 | 能打死木桩，也能被打死 | S–M | ✅ 完成 |
+| **4. 连招系统** | 三段连起来且「乱按不串招」 | 连按顺畅出 1→2→3；停手回 Idle | M | 🟡 进行中 |
 | **5. 防御三件套** | 闪避 / 极限闪避 / GP 都能用且回耐 | 闪避能穿攻击；极限闪避有提示并回耐；GP 能弹开并回耐 | M–L | ⬜ |
 | **6. 一闪** | GP/极限闪避成功 → 反击 | GP 成功后按攻击键出一闪，直接打掉一大截血 | M | ⬜ |
 | **7. 气刃与特殊攻击** | 气刃资源 + 3 段气刃连段 + 段位 | 命中攒气、气刃连段打得出来、没气打不出 | M–L | ⬜ |
@@ -90,7 +90,7 @@
 - 结论：**判定层 + 木桩敌人全部跑通，阶段 2 完成**
 - ✅ 决策：表现层后置 —— 阶段 2–10 只做判定与规则，当前仅加「零资源反馈」（`AttackHitbox` / `Hurtbox` 的 `OnDrawGizmos` 调试可视化 + 朝向指示物），模型/动画留到阶段 11
 
-**阶段 3（进行中）**
+**阶段 3（已完成）**
 - ✅ 决策：**A1** 硬直帧数进 `AttackData.hitStunFrames`（每招式不同）；**B1** 顿帧冻结整个逻辑时钟（不广播 tick + 丢累加器）；**C1** 现在就帧化 `PlayerMotor`，木桩配极简 `EnemyMotor`；**D1** `elapsedFrames` 迁入 `CombatActor` 改名 `StateFrames`
 - ✅ 第 0 步：计时归位 + 顿帧开关 + `PlayerMotor` 帧化
   - `CombatActor.stateEnteredFrame` + `public int StateFrames => CombatClock.Frame - stateEnteredFrame;`（**差值式**，`SetState` 内唯一复位）。刻意**不用**"订阅 `OnTick` 自增"：`CombatActor` 与控制器订阅同一个事件，谁先被通知只由组件顺序决定，先后颠倒就会让整条帧数表错一帧；差值式没有这个隐患，而且顿帧期间 `Frame` 不增 ⇒ 所有状态计时**自动冻结**
@@ -119,7 +119,16 @@
   - **修掉一个编译阻塞**：`CombatActor.cs:30` 残留半截行 `Vector3 knockbackDirection` → `error CS1002: ; expected`，整工程无法编译（`Logs/Editor.log:17225`）
   - 判定层不受影响：`AttackHitbox.cs:19` 用 `LayerMask.GetMask("Hurtbox")`，木桩新的 CharacterController 在 `Enemy`(9) 层，不会被当受击盒；场景两个 Prefab 实例均 `m_RemovedComponents: []`，没有指向已删 CapsuleCollider 的残留引用
   - 验收 6 条：① 位移随招式变化（Slash1 ≈0.4 m / Slash3 ≈1.4 m）② 绕到侧面打 → 沿**攻击者面朝方向**推（不是两人连线）③ 顿帧期间双方不动、解冻后才开始退 ④ 自己被打中 → 被推，且推期间按 WASD 无效 ⑤ 连续两刀不叠加成两倍速 ⑥ 不穿模、反复 Play 3 次一致
-- ⬜ 第 4 步：生死（`Dead` 状态真正切换 + 死后关判定 + 木桩停手）
+- ✅ 第 4 步：生死（`Dead` 状态真正切换 + 死后关判定 + 木桩停手）
+  - 规则：死亡不再是"控制器每帧兜底"，而是 `CombatActor.TakeDamage` 在 HP 归零时自己 `SetState(CombatState.Dead)`（决策 2A：状态唯一来源）—— 同一逻辑帧内任何读 `actor.State` 的人都立刻看到 `Dead`
+  - 死后收刀（每帧幂等）：`EnemyCombat` / `PlayerCombat` 的死亡收尾无条件 `attackHitbox.Deactivate()` + 清 `attackBuffered` / `bufferFramesLeft` / `comboStep`。**修掉一个真 bug**：`EnemyCombat` 原来的死亡分支只置状态、没收刀 ⇒ 木桩若死在判定帧里判定盒永远开着，**尸体继续打人**
+  - 尸体不算命中：`AttackHitbox` 在去重之后插 `if (hurtbox.Owner.IsDead) continue;`（决策 3A），`CombatResolver` 的 `defender.IsDead` 守卫保留作双保险
+  - 决策 1A：死亡瞬间保留击退 —— 尸体滑一下再停；`KnockbackVelocity` 本来就是"用截止帧号算出来的属性"，与状态无关，因此这条不需要额外代码
+  - `EnemyMotor.cs` / `.meta` 从 `Scripts/` 移到 `Scripts/Character/`（与 `PlayerMotor` 同目录）；`.meta` 的 guid 未变 ⇒ `Enemy.prefab` 的 `m_Script` 引用照旧解析，git 识别为纯重命名 `R100`
+  - **修掉一处坏粘贴**：死亡分支被贴进了 `EnemyMotor.OnDisable()` —— 那个 `return` 把 `-= OnCombatTick` 退订挡掉了（本工程禁用 Domain Reload ⇒ 重进 Play 会**重复订阅**，一次 tick 走两遍），且产生 `error CS0103: The name 'attackHitbox' does not exist in the current context`（`Logs/Editor.log:19468`）；同时清掉 `Enemy.prefab` 里为该字段序列化出的 `attackHitbox:` 行
+  - 验收 6 条（用户确认第 ② 条通过：打死木桩后判定盒 Gizmos 是**黄框** = 已收刀）：① 木桩死亡立刻收刀、之后无攻击日志 ② 死在 `ACTIVE` 帧内也不再打到你 ③ 对尸体挥刀无伤害 / 无顿帧 / 不算命中 ④ 玩家死后不能动不能攻击、HUD 显示 `DEAD`，尸体仍被推 ⑤ 死后 HP 不再变化 ⑥ 反复进出 Play 3 次一致
+  - 提交 `f5b5388`（6 文件 +12/−5，含两个 `R100` 重命名）
+  - 教训：改含中文的源码用 `edit` 工具比 pwsh 精确匹配可靠（pwsh 里全角引号 `“ ”` 会让整段脚本无法解析；中文匹配串经命令行传输会对不上，报 `expected 1 match, got 0`）
 
 ## 5. 待定决策（到对应阶段再定，届时附上每种选法的代价）
 
@@ -137,6 +146,9 @@
 | 硬直期间的移动：照常能动 vs 锁住 | ✅ **已定：锁住水平位移、重力照常**（阶段 3）—— `PlayerMotor` 读 `CombatActor.State`，`Hit` / `Dead` 时不 `Move()` |
 | 顿帧时长的计量单位：渲染帧 vs 逻辑帧 | ✅ **已定：逻辑帧**（阶段 3 第 2 步）—— 按渲染帧计时会让"6 帧"在 483 fps 的机器上只有 12 ms、在 30 fps 的机器上 200 ms（16 倍漂移）；改为在 tick 循环里消费后与渲染帧率完全无关 |
 | 击退的运动模型：恒速推 N 帧 vs 冲量 + 每帧衰减 | ✅ **已定：恒速推 N 帧**（阶段 3 第 3 步）—— 距离 ÷ 帧数 = 每帧步长，推完即停、帧数精确可验收；缓动曲线留到阶段 11 手感打磨，不提前复杂化 |
+| 死亡瞬间是否还保留击退：尸体滑一下 vs 立刻定住 | ✅ **已定：保留击退**（阶段 3 第 4 步）—— 击退是"用截止帧号算出的属性"，与状态无关；而且人被打飞时不会瞬间悬停，尸体滑出去更自然，代价是死后还有一小段位移 |
+| 由谁把状态写成 `Dead`：各控制器自己判断 vs `CombatActor.TakeDamage` 写入 | ✅ **已定：`CombatActor` 写入**（阶段 3 第 4 步）—— 纪律 #3「状态唯一来源」的必然延伸；控制器只做幂等收尾，不再各自 `if (IsDead) SetState(Dead)` |
+| 对尸体挥刀：算命中 vs 跳过 | ✅ **已定：跳过**（阶段 3 第 4 步）—— 尸体不该喂招（否则阶段 4 的连招能靠尸体续段），且不给顿帧/伤害；`AttackHitbox` 里跳过 `Owner.IsDead` 的 `Hurtbox`，`CombatResolver` 的 `IsDead` 守卫留作双保险 |
 | 击退方向：攻击者正前方 vs 攻击者→受击者连线 | ✅ **已定：攻击者正前方**（阶段 3 第 3 步）—— 侧面打也沿朝向推，连招落点可预测，且不会在两人重合时出现零向量退化 |
 | 木桩的移动方式：加 `CharacterController` + `EnemyMotor` vs 直接改 `transform.position` | ✅ **已定：加 CharacterController**（阶段 3 第 3 步）—— 与玩家共用同一套移动规则、有碰撞、有重力，将来给木桩加走位不必重做；代价是 Prefab 要删掉根上原来的 CapsuleCollider |
 | 表现层引入时机：边做机制边接模型/动画 vs 逻辑优先、表现后置 | ✅ **已定：逻辑优先，表现后置到阶段 11**（阶段 2）—— 帧数表在阶段 5/6/8 还会变动，现在做动画对表等于白干；当前只加「零资源反馈」（Gizmos 判定可视化 + 朝向指示物） |
@@ -169,6 +181,13 @@
 | `EnemyMotor.cs` 与 `PlayerMotor.cs` 是两份几乎相同的代码（重力 + 击退） | 4–7（等木桩需要走位 / 冲刺时再抽公共基类或独立 `Motor` 组件，过早抽象会把两者不同的输入来源硬拧到一起） |
 
 ## 7. 变更记录
+
+- **2026-10-12 · 阶段 3 第 4 步（生死）—— 阶段 3 完成**
+  - `CombatActor.TakeDamage`：HP 归零时自己 `SetState(CombatState.Dead)`（决策 2A）；`EnemyCombat` / `PlayerCombat` 的死亡收尾转为正式路径并保持每帧幂等（收刀 + 清输入缓冲与 `comboStep`）
+  - 修掉"尸体继续打人"：`EnemyCombat` 死亡分支原来只置状态没收刀；`AttackHitbox` 现在跳过 `Owner.IsDead` 的 `Hurtbox`（决策 3A）
+  - `EnemyMotor.cs` / `.meta` 移到 `Scripts/Character/`（guid 不变，`Enemy.prefab` 引用不受影响；git 识别为 `R100`）
+  - 修掉一处坏粘贴：死亡分支被贴进 `EnemyMotor.OnDisable()`，`return` 挡掉退订（禁用 Domain Reload 下会重复订阅）+ `error CS0103`；并清掉 `Enemy.prefab` 里为该字段序列化出的 `attackHitbox:` 行
+  - 提交 `f5b5388`「feat: 阶段 3 第 4 步 —— 生死（Dead 状态 / 死后关判定 / 尸体不算命中）」；验收第 ② 条由用户确认（打死木桩后判定盒黄框）
 
 - **2026-10-12 · 阶段 3 第 3 步（击退 + `EnemyMotor`）**
   - `AttackData` 加 `knockbackDistance` / `knockbackFrames`（4 个资产实填 0.4/8 · 0.7/10 · 1.4/14 · 0.5/10）；`CombatResolver` 算击退方向并 `defender.ReceiveHit(attack, knockbackDir)`；`CombatActor` 用 `knockbackEndFrame` 截止帧号 + `KnockbackVelocity` 差值属性（顿帧自动冻结）；`PlayerMotor` 新增 `ApplyKnockback()` 并放在输入锁之外；新建 `EnemyMotor.cs`
