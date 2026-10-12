@@ -46,8 +46,9 @@ public class AttackHitbox : MonoBehaviour
             Hurtbox hurtbox = results[i].GetComponentInParent<Hurtbox>();
             if (hurtbox == null) continue;
             if (hurtbox.Owner == null) continue;
-            if (hurtbox.Owner == owner) continue;         // 不打自己
-            if (hitTargets.Contains(hurtbox)) continue;   // 同一次挥击只结算一次
+            if (hurtbox.Owner == owner) continue;        // 不打自己
+            if (hitTargets.Contains(hurtbox)) continue;  // 同一次挥击只结算一次
+            if (hurtbox.Owner.IsDead) continue;          //不打尸体
 
             hitTargets.Add(hurtbox);
             CombatResolver.ResolveHit(owner, hurtbox.Owner, currentAttack);

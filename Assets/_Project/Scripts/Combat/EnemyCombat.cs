@@ -27,9 +27,10 @@ public class EnemyCombat : MonoBehaviour
     {
         if (actor == null || attackHitbox == null || attack == null) return;   // 兜底
 
-        // 被打死了就躺平：阶段 3 会把这里做成正式的状态迁移
+        // 死亡收尾（幂等）：死在判定帧里也必须收刀，否则尸体继续打人
         if (actor.IsDead)
         {
+            attackHitbox.Deactivate();   // 幂等：死在判定帧里也必须收刀
             if (actor.State != CombatState.Dead) actor.SetState(CombatState.Dead);
             return;
         }

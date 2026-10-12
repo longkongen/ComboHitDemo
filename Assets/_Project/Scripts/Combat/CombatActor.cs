@@ -48,6 +48,7 @@ public class CombatActor : MonoBehaviour
         {
             hp = 0f;
             Debug.Log($"[CombatActor] {name} 被击倒（HP 0）", this);
+            SetState(CombatState.Dead);   // 决策 2A：死亡由状态拥有者写入，各控制器只做幂等收尾
         }
         else 
         {

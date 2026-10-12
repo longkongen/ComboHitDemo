@@ -88,14 +88,18 @@ public class PlayerCombat : MonoBehaviour
     {
         UpdateInputBuffer();
 
-        // 死亡兜底：完整的死亡流程在阶段 3 第 4 步，这里先与 EnemyCombat 对齐（收刀 + 躺平）
-        // 注意 CombatActor.ReceiveHit 在致命伤时会 return，不进入 Hit —— 所以“进 Dead”必须由控制器负责
+        // 死亡收尾（幂等）：CombatActor.TakeDamage 已经把状态写成 Dead，这里只负责收刀 + 清残留输入
+        // 受击方的 tick 可能在攻击方命中之前就跑过了，所以收尾必须每帧幂等，不能只在死亡那一帧做一次
         if (actor.IsDead)
         {
             attackHitbox.Deactivate();
+            attackBuffered = false;
+            bufferFramesLeft = 0;
+            comboStep = 1;
             if (actor.State != CombatState.Dead) actor.SetState(CombatState.Dead);
             return;
         }
+
 
         switch (actor.State)
         {
