@@ -1,46 +1,20 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-public class PlayerCombat : MonoBehaviour
+public class PlayerCombat : CombatController
 {
-    [SerializeField]
-    private CombatActor actor;
-
     private const int maxCombo = 3;
 
-    // 输入缓冲：按键先被记住，等取消窗口到来再消费；超时作废，
-    // 否则很久以前的按键会在回到 Idle 的瞬间“复活”，打出一段玩家没按过的攻击。
-    // 单位是逻辑帧：30 帧 = 0.5 秒，可以直接和招式帧数比较。
-    [SerializeField]
-    private int inputBufferFrames = 30;
+    [SerializeField] private int inputBufferFrames = 30;
     private bool attackBuffered;
     private int bufferFramesLeft;
+    private int comboStep;                  // 0 = 没有连招在进行中
 
-    // 状态内帧数不在本地自增了：由 CombatActor.StateFrames 统一派生
-    // （状态由 CombatActor 独占持有，计时必须跟状态走，否则外部改写状态时会对不上）
+    [SerializeField] private AttackData[] combo;
 
-    private int comboStep;
-    private AttackData currentAttack;
-
-    [SerializeField]
-    private AttackData[] combo;
-
-    [SerializeField]
-    private AttackHitbox attackHitbox;
-
-    private void Awake()
+    protected override void Awake()
     {
-        // 缺失引用属于“配置错误”，启动时就响亮地失败，别等玩家按键才抛 NullReference
-        if (actor == null)
-        {
-            Debug.LogError("[PlayerCombat] actor 未接线", this);
-            enabled = false;
-        }
-        if (attackHitbox == null)
-        {
-            Debug.LogError("[PlayerCombat] attackHitbox 未接线", this);
-            enabled = false;
-        }
+        base.Awake();                       // ← 必须先调：基类的引用校验 + enabled=false 都在里面
 
         // combo 是手拖引用，最容易漏；长度不足或含空槽位都在这里当场拦下
         if (combo == null || combo.Length < maxCombo)
@@ -62,163 +36,44 @@ public class PlayerCombat : MonoBehaviour
         }
     }
 
-    // ===== 调试用只读快照：不参与战斗逻辑，只给 CombatDebugHUD 看 =====
-    public CombatActor Actor => actor;
-    public CombatState State => (actor != null) ? actor.State : CombatState.Idle;
-    public AttackData CurrentAttack => currentAttack;
-    public int ElapsedFrames => actor.StateFrames;
+    private void Update() { CheckAttackInput(); }        // 渲染帧只采样，不进状态机
 
-    // 纪律：渲染帧只负责采样输入，逻辑帧才推进状态机（CombatClock 的执行顺序是 order 1000）
-    private void OnEnable()
+    protected override void OnPreTick() { UpdateInputBuffer(); }
+
+    protected override void OnIdleTick()
     {
-        CombatClock.OnTick += OnCombatTick;
+        if (!attackBuffered) return;
+        attackBuffered = false;
+        bufferFramesLeft = 0;
+        comboStep = 1;
+        StartAttack(combo[comboStep - 1]);
     }
 
-    private void OnDisable()
+    protected override void TickRecovery()
     {
-        CombatClock.OnTick -= OnCombatTick;      // 必须成对退订，否则一次 tick 会走两遍逻辑
-    }
+        // 连招窗口（决策 1A）：判定帧结束 → 收招结束前 comboWindowCloseEarly 帧
+        bool inWindow = (actor.StateFrames <= currentAttack.ComboWindowCloseFrame);
 
-    private void Update()
-    {
-        CheckAttackInput();
-    }
-
-    private void OnCombatTick(int frame)
-    {
-        UpdateInputBuffer();
-
-        // 死亡收尾（幂等）：CombatActor.TakeDamage 已经把状态写成 Dead，这里只负责收刀 + 清残留输入
-        // 受击方的 tick 可能在攻击方命中之前就跑过了，所以收尾必须每帧幂等，不能只在死亡那一帧做一次
-        if (actor.IsDead)
+        if (inWindow && attackBuffered && comboStep < maxCombo)
         {
-            attackHitbox.Deactivate();
             attackBuffered = false;
             bufferFramesLeft = 0;
-            comboStep = 0;
-            if (actor.State != CombatState.Dead) actor.SetState(CombatState.Dead);
+            comboStep++;
+            StartAttack(combo[comboStep - 1]);   // 取消剩余收招
             return;
         }
+        if (!inWindow) { attackBuffered = false; bufferFramesLeft = 0; }
 
-
-        switch (actor.State)
-        {
-            case CombatState.Idle:
-                UpdateIdle();
-                break;
-            case CombatState.Attack:
-                UpdateAttack();
-                break;
-            case CombatState.Recovery:
-                UpdateRecovery();
-                break;
-            case CombatState.Hit:
-                UpdateHit(); 
-                break;
-        }
+        base.TickRecovery();                 // 收招播完 → Idle（含 OnComboEnded + 清残留）
     }
 
-    // 这个包装不只是转发：还要打日志、并在进入攻击时做一次收刀保险。
-    // 计时复位不在这里 —— 它跟着 SetState 走，由 CombatActor 独占（StateFrames）
-    private void ChangeState(CombatState next)
+    protected override void OnComboEnded() { comboStep = 0; }
+
+    protected override void ClearPendingInput()
     {
-        actor.SetState(next);
-
-        switch (next)
-        {
-            case CombatState.Idle:
-                Debug.Log("进入 Idle");
-                break;
-
-            case CombatState.Attack:
-                attackHitbox.Deactivate();      // 保险：进入攻击时判定体必须是关的
-                Debug.Log($"进入攻击：{currentAttack.attackName}（起手 {currentAttack.startupFrames} 帧）");
-                break;
-
-            case CombatState.Recovery:
-                Debug.Log($"进入 Recovery（收招 {currentAttack.recoveryFrames} 帧）");
-                break;
-
-            default:
-                Debug.LogWarning($"[PlayerCombat] 未处理的状态迁移：{next}", this);
-                break;
-        }
-    }
-
-    private void UpdateIdle()
-    {
-        if (attackBuffered)
-        {
-            attackBuffered = false;
-            bufferFramesLeft = 0;
-            comboStep = 1;
-            StartAttack();
-        }
-    }
-
-    private void StartAttack()
-    {
-        currentAttack = combo[comboStep - 1];
-        ChangeState(CombatState.Attack);        // 内部走 actor.SetState，计时由 StateFrames 派生
-    }
-
-    private void UpdateAttack()
-    {
-        // 跨进判定期的那一帧：开判定（帧化后可以精确用 == 定位某一帧，秒计时做不到）
-        if (actor.StateFrames == currentAttack.ActiveStartFrames)
-        {
-            attackHitbox.Activate(currentAttack);
-            Debug.Log($"进入 Active（第 {actor.StateFrames} 帧）");
-        }
-
-        // 判定期结束的那一帧：关判定并进收招
-        if (actor.StateFrames >= currentAttack.ActiveEndFrames)
-        {
-            attackHitbox.Deactivate();
-            ChangeState(CombatState.Recovery);
-        }
-    }
-
-    private void UpdateRecovery()
-    {
-        bool inWindow = (actor.StateFrames <= currentAttack.ComboWindowCloseFrame);
-        
-        
-            if (inWindow && attackBuffered && comboStep < maxCombo)
-            {
-                attackBuffered = false;
-                bufferFramesLeft = 0;
-                comboStep++;
-                // StartAttack 内部已完成 ChangeState(Attack)，这里不能重复调用
-                StartAttack();
-                return;
-            }
-            if (!inWindow)
-        {
-            attackBuffered = false ;
-            bufferFramesLeft = 0;   
-        }
-            if (actor.StateFrames >= currentAttack.recoveryFrames)
-        {
-            comboStep = 0;
-            ChangeState(CombatState.Idle);
-        }
-            
-        
-    }
-    private void UpdateHit()
-    {
-        attackHitbox.Deactivate();
         attackBuffered = false;
         bufferFramesLeft = 0;
         comboStep = 0;
-
-        AttackData hit = actor.LastHit;
-        int stun = (hit != null) ? hit.hitStunFrames : 0;
-        if (actor.StateFrames >= stun)
-        {
-            ChangeState(CombatState.Idle);
-        }
     }
 
     private void CheckAttackInput()

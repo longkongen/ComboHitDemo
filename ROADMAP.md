@@ -1,7 +1,7 @@
 # ComboHitDemo · 开发路线图
 
 > 微高速动作 ACT Demo（Unity 6 / C#）：**连招 · GP · 极限闪避 · 相杀拼刀 · QTE 处决**
-> 最后更新：2026-10-12（阶段 3 完成；**阶段 4 连招系统进行中** —— 第 0 步连招窗口 + 取消语义已落地，下一步抽共享 `CombatController`）
+> 最后更新：2026-10-13（阶段 3 完成；**阶段 4 连招系统进行中** —— 第 0 步连招窗口 + 取消语义、第 1 步共享 `CombatController` 均已落地，下一步 `ComboChain` SO）
 
 ---
 
@@ -138,7 +138,14 @@
   - 收招期间 `CombatActor.StateFrames` 从 **1** 开始（进入 Recovery 的那一帧已被 `UpdateAttack` 用掉）⇒ 窗口条件是 `<=`，不是 `<`
   - 顺手统一哨兵：`comboStep = 0` = "没有连招在进行中"（原先死亡收尾写 1、受击/终止收尾写 0，两种表示并存）；`UpdateIdle` 起手前会设成 1
   - 可调档位：若想要"必须播完收招"的重量感，把 `StartAttack()` 那一支改成只记 `chainPending = true`、到收招末帧再执行即可（窗口退化成输入门）
-- ⬜ 第 1 步：抽 `CombatController`（共享招式播放器）
+- ✅ 第 1 步：抽 `CombatController`（共享招式播放器）
+  - 新增基类 `Assets/_Project/Scripts/Combat/CombatController.cs`（120 行，由阶段 0 的空占位文件变成实体）：字段名与原子类**完全一致** —— `[SerializeField] protected CombatActor actor;` / `[SerializeField] protected AttackHitbox attackHitbox;`（Unity 按字段名反序列化 ⇒ 改名会让 Prefab 引用静默变 None）；`Awake` 自解析 + 缺失即 `LogError` + `enabled = false`
+  - 基类负责"一招怎么播"：`StartAttack(AttackData)` / `TickAttack()`（`StateFrames == ActiveStartFrames` 开判定、`>= ActiveEndFrames` 关判定并进收招）/ `TickRecovery()`（默认播完 → `OnComboEnded` + `ClearPendingInput` + `Idle`）/ `TickHit()`（每帧幂等收刀，按 `LastHit.hitStunFrames` 回 `Idle`）/ 死亡幂等收尾 / `ChangeState` 日志
+  - 子类只答"谁在打、打哪一招"：挂钩点 `OnPreTick` / `OnIdleTick` / `OnComboEnded` / `ClearPendingInput`。`PlayerCombat` 246 → 83 行（只留输入采样 + 缓冲 + 连招窗口覆盖），`EnemyCombat` 85 → 17 行（只留 `attack` + `idleFrames` + 数节拍）
+  - **重构时丢过一处校验**：`PlayerCombat.Awake` 里的 combo 数组校验（null / 长度 < `maxCombo` / 空槽位 → `LogError` + `enabled = false`）被一行注释顶掉，已补回 —— 教训：抽基类时逐条对照旧文件的生命周期收尾（`Awake` / 死亡 / 受击），别只搬状态机
+  - 顺手修：`CombatController.cs` 是第 5 个 GBK 文件 → 转 UTF-8 无 BOM（CRLF 119 / 裸 LF 0 / U+FFFD 0）；`EnemyCombat.cs` 缩进 8 → 4 空格
+  - **新验证手法（可复用，不必等 Unity 获得焦点）**：`& 'D:\unity\6000.6.2f1\Editor\Data\DotNetSdk\dotnet.exe' build Assembly-CSharp.csproj -nologo -v:m`（Unity 自己生成的工程文件）→ 2.2 秒拿到 `0 个错误`（只有 7 条 nunit / 目标框架版本的历史警告）；产物落在 `Temp/bin/Debug/`，不碰 `Library/ScriptAssemblies/`
+  - 验收靠"行为逐帧不变"（木桩节拍、10/15/25 伤害、12 帧硬直、死亡黄框、四行状态日志格式一字不差）+ 一条硬证据：**`git diff --stat` 里不出现 `Player.prefab` / `Enemy.prefab` / `SampleScene.unity`**（引用一个字都没动）
 - ⬜ 第 2 步：`ComboChain` SO（每段声明允许接什么）
 - ⬜ 第 3 步：输入迁移到 `InputSystem_Actions`（删掉直读 `Mouse.current` / `Keyboard.current`）
 
@@ -198,6 +205,13 @@
 | 连招改为**取消语义**后，阶段 3 记录过的"帧数优势窗口"（例：Slash3 收招 21 帧 vs 硬直 20 帧）不再直接成立 | 8（阶段 4 第 0 步引入：收招可被取消 ⇒ 实际连段总时长变短，相杀/GP 的帧数比较要按新规则重算） |
 
 ## 7. 变更记录
+
+- **2026-10-13 · 阶段 4 第 1 步（抽共享 `CombatController`）**
+  - 新增 `CombatController` 基类（共享招式播放器），`PlayerCombat` / `EnemyCombat` 变薄壳：状态机只剩一份，阶段 5/6/8 的新机制以后只在一处加
+  - 字段名 `actor` / `attackHitbox` 原样保留 ⇒ 两个 Prefab 与场景一行都不用动（`git diff` 里没有 Prefab / 场景 = 引用未断的硬证据）
+  - 补回重构时丢掉的 `PlayerCombat` combo 数组校验；`CombatController.cs` GBK → UTF-8 无 BOM
+  - 新增"不必等 Unity 焦点"的编译验证手法：Unity 自带 `dotnet build Assembly-CSharp.csproj`（0 个错误，2.2 秒）
+  - 另记：推送开始报 `SSL certificate OpenSSL verify result: unable to get local issuer certificate (20)` —— 本机根证书库里有 Fiddler / 游戏加速器的私有根（`DO_NOT_TRUST_FiddlerRoot`、`XunYouRootCA`、`Leigod CA`…）且 `clash-verge` 在跑，TLS 被中间人替换了签发者；解法是 `-c http.sslCAInfo=<Git 公共 CA + Windows 证书库合并的 bundle>`（生成在 gitignore 的 `Logs/ca-bundle-os.crt`），**没有关闭证书校验**
 
 - **2026-10-12 · 阶段 4 第 0 步（连招窗口 + 取消语义）**
   - `AttackData.comboWindowCloseEarly`（默认 0）+ `ComboWindowCloseFrame` 派生属性 + `OnValidate` 夹 ≥0；`Attack_Slash3` 实填 3，其余取默认 0
