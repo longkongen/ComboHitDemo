@@ -1,7 +1,7 @@
 # ComboHitDemo · 开发路线图
 
 > 微高速动作 ACT Demo（Unity 6 / C#）：**连招 · GP · 极限闪避 · 相杀拼刀 · QTE 处决**
-> 最后更新：2026-10-13（阶段 3 完成；**阶段 4 连招系统完成** —— 第 0 步连招窗口 + 取消语义、第 1 步共享 `CombatController`、第 2 步 `ComboChain` SO、第 3 步输入迁移到 `InputSystem_Actions` 均已落地；下一步进入**阶段 5 防御三件套**）
+> 最后更新：2026-10-13（阶段 4 连招系统完成；**阶段 5 防御三件套进行中** —— 第 0 步耐力地基 `StaminaSystem` + HUD 已落地，下一步普通防御 `GuardSystem`）
 
 ---
 
@@ -163,6 +163,26 @@
   - 顺手清理：`PlayerInputSource.cs` 是第 6 个被编辑器存成 GBK 的脚本 → 转 UTF-8 无 BOM（1626 → 1675 字节，CRLF 40 / 裸 LF 0 / U+FFFD 0）；`PlayerMotor.cs` 行尾 mixed → LF（与索引 `i/lf` 一致）；删掉 `PlayerCombat.cs` 里 IDE 自动加的 `using UnityEngine.Windows;`
   - 验收：`dotnet build Assembly-CSharp.csproj` 0 错误；用户在 Unity 里 Play 确认 WASD / 出招 / 鼠标转朝向正常（2026-10-13）
 
+**阶段 5（进行中）** —— 防御三件套（普通防御 / GP / 闪避 · 极限闪避）
+
+- 决策（用户 2026-10-13 全选 A）：
+  - **防御键位 = 一键两用**：按下瞬间起 **8 帧**（0~0.13 s）是 GP 窗口（弹开），窗口过后仍按住 = 普通防御（减伤）
+  - **GP 成功效果 = 攻方进硬直**：攻方按被弹开招式的 `hitStunFrames` 进 `Hit`，双方各一次 `RequestHitStop`，防守方回耐 **30**
+  - **闪避 = 起手后前 9 帧无敌**（0.15 s），其余时间照常挨打；在「对方判定帧开始前 6 帧内」按下 ⇒ **极限闪避**（回耐 + 长顿帧 + HUD 提示）
+- 先定数值（便于后面手感打磨时只调数字）：GP 窗口 **8 帧**、闪避无敌 **9 帧**、极限闪避识别窗 **6 帧**、耐力上限 **100**、回复 **25/秒**、消耗后停 **30 帧**、闪避消耗 **25**、普通防御被击掉 **10**、GP 成功回 **30**
+- ✅ 第 0 步：耐力地基 `StaminaSystem`
+  - 阶段 0 的 0 字节占位文件转实体（guid `779f4a23c02264f4f96adcdd02fd08fb`），并挂在 **Player 根物体**上（原先被挂成名为 `StaminaSystem` 的子物体，这一步顺手挪到根上：与 `CombatActor` / `PlayerMotor` / `PlayerCombat` / `PlayerInputSource` 同层，后续 `GuardSystem` / `DodgeSystem` 才能 `GetComponent<StaminaSystem>()` 直接取）
+  - `maxStamina = 100` / `regenPerSecond = 25` / `regenDelayFrames = 30`；`TrySpend(cost)` 不够就不花、够则扣并压制回复；`Restore(amount)` 只加数字、**不动压制计时**（奖励回耐不该顺带解禁回复）
+  - 回复按逻辑帧算（`regenPerSecond * CombatClock.TickDelta`）⇒ 与帧率无关，顿帧期间自动冻结；`IsExhausted` 留给阶段 10 破防用
+  - 耐力**不写进 `CombatActor`**：它是"资源"不是"状态"，写进去会让 `CombatActor` 同时承担两件事
+  - HUD 玩家/敌人行尾各加 `STAM xxx/100`（`CombatDebugHUD` 从已有的 `player` / `enemy` 引用 `GetComponent<StaminaSystem>()` 取，不新增手拖字段；取不到显示 `STAM n/a` = Prefab 漏挂的显式信号）
+  - 暂留两个 `[ContextMenu]` 调试钩子（`Debug: 花 30 耐力` / `Debug: 回 40 耐力`），第 1 步接入真正的消耗者时删除
+  - 验收：HUD 出现 `STAM 100/100`、花 30 立刻变 70 且 Console `TrySpend(30) = True，剩余 70`、之后 30 帧不动再按 25/秒回、花到 0 后 `TrySpend` 返回 `False` 且不会变负、`Debug: 回 40` 封顶 100、反复进出 Play 3 次开局满耐（用户 2026-10-13 确认通过）
+- ⬜ 第 1 步：普通防御（`GuardSystem` + `CombatResolver` 拦截）
+- ⬜ 第 2 步：GP 窗口 + 弹开（按被弹开招式给攻方硬直 + 双方顿帧 + 防守方回耐）
+- ⬜ 第 3 步：闪避位移 + 无敌帧（`DodgeSystem`）
+- ⬜ 第 4 步：极限闪避（`PerfectDodge` + 回耐 + 长顿帧 + HUD 提示）
+
 ## 5. 待定决策（到对应阶段再定，届时附上每种选法的代价）
 
 | 决策 | 状态 / 归属阶段 |
@@ -191,6 +211,9 @@
 | 输入读取的落点：各脚本各自读 `Keyboard.current` / `Mouse.current` vs 单一 `PlayerInputSource` 组件 | ✅ **已定：单一 `PlayerInputSource` 组件**（阶段 4 第 3 步）—— 开关（`Enable` / `Disable`）只有一处、空引用兜底只有一处；将来 GP / 闪避 / 一闪的按键都在这里加一行，不必满工程找 `Keyboard.current` |
 | 攻击输入的桥接方式：Action 状态直接喂状态机 vs 采样后转成本地输入缓冲 | ✅ **已定：保持输入缓冲**（阶段 4 第 3 步）—— 采样组件只暴露"这一渲染帧按下过"，`PlayerCombat` 立刻转成 30 帧缓冲，手感与阶段 1–3 完全一致；缓冲是"逻辑侧记忆"，不该由输入层持有 |
 | 鼠标 `Look` 的用途：这一步只控角色朝向 vs 顺便接管相机 | ✅ **已定：先只控角色朝向**（阶段 4 第 3 步）—— `Look` 增量驱动 `yaw`，判定盒与击退方向随朝向走；相机保持固定视角，完整的第三人称相机（跟随 + 角色朝移动方向）留单独一步，避免一次改两套坐标系 |
+| 防御键位：攻击/防御分两个键 vs 一键两用（前 8 帧 GP、按住普通防御） | ✅ **已定：一键两用**（阶段 5，决策 A）—— 少一个键位、更接近"抓到格挡点"的手感；代价是"按住不放"与"踩点按下"要在表现上区分（盾光 / 音效），且玩家可能一直按住吃减伤 |
+| GP 成功的效果：只弹开（双方都不断） vs 攻方进硬直 + 双方顿帧 + 防守方回耐 | ✅ **已定：攻方进硬直 + 双方顿帧 + 回耐**（阶段 5，决策 A）—— GP 的收益必须"看得见、能接后续"（攻方硬直窗口就是反击窗口，也是阶段 6 一闪的入口）；代价是攻方在硬直里更容易被连招 |
+| 闪避的无敌与极限闪避判定：全程无敌 vs 只前 9 帧无敌；按"我按得早/晚" vs 按"对方判定帧前 N 帧" | ✅ **已定：前 9 帧无敌 + 对方判定帧开始前 6 帧内算极限闪避**（阶段 5，决策 A）—— 无敌帧有限才有择时压力；用"对方判定帧"而不是"我按键的时刻"来判定，才不受输入延迟与帧率影响 |
 | 击退方向：攻击者正前方 vs 攻击者→受击者连线 | ✅ **已定：攻击者正前方**（阶段 3 第 3 步）—— 侧面打也沿朝向推，连招落点可预测，且不会在两人重合时出现零向量退化 |
 | 木桩的移动方式：加 `CharacterController` + `EnemyMotor` vs 直接改 `transform.position` | ✅ **已定：加 CharacterController**（阶段 3 第 3 步）—— 与玩家共用同一套移动规则、有碰撞、有重力，将来给木桩加走位不必重做；代价是 Prefab 要删掉根上原来的 CapsuleCollider |
 | 表现层引入时机：边做机制边接模型/动画 vs 逻辑优先、表现后置 | ✅ **已定：逻辑优先，表现后置到阶段 11**（阶段 2）—— 帧数表在阶段 5/6/8 还会变动，现在做动画对表等于白干；当前只加「零资源反馈」（Gizmos 判定可视化 + 朝向指示物） |
@@ -223,8 +246,16 @@
 | `EnemyMotor.cs` 与 `PlayerMotor.cs` 是两份几乎相同的代码（重力 + 击退） | 4–7（等木桩需要走位 / 冲刺时再抽公共基类或独立 `Motor` 组件，过早抽象会把两者不同的输入来源硬拧到一起） |
 | 连招改为**取消语义**后，阶段 3 记录过的"帧数优势窗口"（例：Slash3 收招 21 帧 vs 硬直 20 帧）不再直接成立 | 8（阶段 4 第 0 步引入：收招可被取消 ⇒ 实际连段总时长变短，相杀/GP 的帧数比较要按新规则重算） |
 | 同物体引用自解析不成套（`controller` / `actor` / `input` 三类，漏一个就**静默失灵**） | ✅ 已解决（阶段 4 第 3 步：`PlayerMotor` 补 `input` 自解析 + `PlayerMotor` / `PlayerCombat` 各加一条 `LogError`；教训：缺引用必须响亮报错，否则表现成"按键没反应"） |
+| `StaminaSystem` 的两个 `[ContextMenu]` 调试钩子（`Debug: 花 30 耐力` / `Debug: 回 40 耐力`）是临时脚手架 | 5（第 1 步接入真正的消耗者后删除） |
 
 ## 7. 变更记录
+
+- **2026-10-13 · 阶段 5 第 0 步（`StaminaSystem` 耐力地基 + HUD 显示）**
+  - 耐力从"路线图里的数字"变成可花可回的组件：`StaminaSystem`（`TrySpend` / `Restore` / `IsExhausted`），回复按逻辑帧算、消耗后停 30 帧
+  - `Restore` 刻意**不动压制计时**：GP / 极限闪避的"回耐奖励"是奖励，不该顺带解除刚挨打后的回复惩罚（否则奖励越强、惩罚越形同虚设）
+  - `Player.prefab`：把 `StaminaSystem` 从子物体挪到 **Player 根物体**（与 `CombatActor` / `PlayerMotor` / `PlayerCombat` / `PlayerInputSource` 同层）⇒ 后续 `GuardSystem` / `DodgeSystem` 用 `GetComponent` 就能取到，不必 `GetComponentInChildren`；校验 18 个文档块、0 个悬空引用
+  - HUD 玩家/敌人行尾加 `STAM xxx/100`，从已有引用 `GetComponent<StaminaSystem>()` 取（不新增手拖字段），取不到显示 `STAM n/a` 当"Prefab 漏挂"的显式信号
+  - 顺手：`StaminaSystem.cs` 是第 7 个被编辑器存成 GBK 的脚本 → 转 UTF-8 无 BOM；`CombatDebugHUD.cs` 行尾归一 CRLF；`dotnet build Assembly-CSharp.csproj` 0 错误
 
 - **2026-10-13 · 阶段 4 第 3 步（输入迁移到 `InputSystem_Actions`）· 阶段 4 完成**
   - 输入从"各脚本自己读设备"收敛成一个组件：新增 `PlayerInputSource`（`Player` map 的 `Move` / `Attack` / `Look`），`Update`（order -100）只采样、逻辑帧消费；`PlayerCombat` 保留 30 帧输入缓冲（手感与阶段 1–3 一致），`PlayerMotor` 用鼠标 `Look` 的增量驱动 `yaw`（`turnSensitivity = 0.2` 度/像素），判定盒与击退方向随朝向走

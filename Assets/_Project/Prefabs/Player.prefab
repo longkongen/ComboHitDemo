@@ -84,6 +84,7 @@ GameObject:
   - component: {fileID: 2541319228010464586}
   - component: {fileID: 5862847208909735581}
   - component: {fileID: 7217611073987130791}
+  - component: {fileID: 525256176227649411}
   m_Layer: 8
   m_Name: Player
   m_TagString: Untagged
@@ -251,6 +252,21 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerInputSource
   actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+--- !u!114 &525256176227649411
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7094994867838083736}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 779f4a23c02264f4f96adcdd02fd08fb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::StaminaSystem
+  maxStamina: 100
+  regenPerSecond: 25
+  regenDelayFrames: 30
 --- !u!1 &8220848220105198918
 GameObject:
   m_ObjectHideFlags: 0

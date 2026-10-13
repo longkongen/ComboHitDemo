@@ -3,11 +3,15 @@ using UnityEngine;
 // 临时调试 HUD（阶段 11 会被正式 UI 取代）
 // 1) 文本在「逻辑帧」里算好，OnGUI 只负责画 —— OnGUI 属于渲染侧，别在里面做逻辑
 // 2) 统一用 ASCII：Unity 内置 IMGUI 字体不含中文字形，写中文会显示成方块
-// 3) 一行一个角色（player / enemy），同时暴露 HP、状态、招式、状态内帧数
+// 3) 一行一个角色（player / enemy），同时暴露 HP、耐力、状态、招式、状态内帧数
 public class CombatDebugHUD : MonoBehaviour
 {
     [SerializeField] private PlayerCombat player;
     [SerializeField] private EnemyCombat enemy;
+
+    // 耐力从各自的控制器所在物体上取，不新增手拖引用（少一个会漂移的字段）
+    private StaminaSystem playerStamina;
+    private StaminaSystem enemyStamina;
 
     private string line1 = "CombatDebugHUD: player not assigned";
     private string line2 = "CombatDebugHUD: enemy not assigned";
@@ -34,6 +38,10 @@ public class CombatDebugHUD : MonoBehaviour
             enemy = FindAnyObjectByType<EnemyCombat>();
             Debug.Log($"[CombatDebugHUD] enemy 未接线，自动找到：{(enemy != null ? enemy.name : "没有")}", this);
         }
+
+        // 耐力：取不到就显示 n/a（说明 Prefab 上漏挂 StaminaSystem），别静默什么都不显示
+        if (player != null) playerStamina = player.GetComponent<StaminaSystem>();
+        if (enemy != null) enemyStamina = enemy.GetComponent<StaminaSystem>();
     }
 
     private void HandleTick(int frame)
@@ -53,7 +61,7 @@ public class CombatDebugHUD : MonoBehaviour
         if (!player.gameObject.scene.IsValid())
             return "player : reference is a Prefab ASSET -> drag from the HIERARCHY, not the PROJECT window";
 
-        return Describe("player", player.Actor, player.CurrentAttack, player.ElapsedFrames);
+        return Describe("player", player.Actor, player.CurrentAttack, player.ElapsedFrames, playerStamina);
     }
 
     private string DescribeEnemy()
@@ -63,10 +71,10 @@ public class CombatDebugHUD : MonoBehaviour
         if (!enemy.gameObject.scene.IsValid())
             return "enemy  : reference is a Prefab ASSET -> drag from the HIERARCHY, not the PROJECT window";
 
-        return Describe("enemy ", enemy.Actor, enemy.CurrentAttack, enemy.ElapsedFrames);
+        return Describe("enemy ", enemy.Actor, enemy.CurrentAttack, enemy.ElapsedFrames, enemyStamina);
     }
 
-    private static string Describe(string tag, CombatActor actor, AttackData a, int e)
+    private static string Describe(string tag, CombatActor actor, AttackData a, int e, StaminaSystem stam)
     {
         if (actor == null) return $"{tag} : CombatActor not assigned (check the prefab wiring)";
 
@@ -104,7 +112,8 @@ public class CombatDebugHUD : MonoBehaviour
                 break;
         }
 
-        return $"{tag}  HP {actor.Hp,3:0}  {state,-8} {name,-11} {phase} frame {e,3}/{span,-3}";
+        string stamText = (stam != null) ? $"  STAM {stam.Stamina,3:0}/{stam.MaxStamina:0}" : "  STAM n/a";
+        return $"{tag}  HP {actor.Hp,3:0}  {state,-8} {name,-11} {phase} frame {e,3}/{span,-3}{stamText}";
     }
 
     private void OnGUI()
