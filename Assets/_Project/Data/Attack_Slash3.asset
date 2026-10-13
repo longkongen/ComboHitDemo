@@ -21,3 +21,4 @@ MonoBehaviour:
   hitStopFrames: 10
   knockbackDistance: 1.4
   knockbackFrames: 14
+  comboWindowCloseEarly: 3

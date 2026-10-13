@@ -95,7 +95,7 @@ public class PlayerCombat : MonoBehaviour
             attackHitbox.Deactivate();
             attackBuffered = false;
             bufferFramesLeft = 0;
-            comboStep = 1;
+            comboStep = 0;
             if (actor.State != CombatState.Dead) actor.SetState(CombatState.Dead);
             return;
         }
@@ -181,25 +181,30 @@ public class PlayerCombat : MonoBehaviour
 
     private void UpdateRecovery()
     {
-        if (actor.StateFrames >= currentAttack.recoveryFrames)
-        {
-            if (attackBuffered && comboStep < maxCombo)
+        bool inWindow = (actor.StateFrames <= currentAttack.ComboWindowCloseFrame);
+        
+        
+            if (inWindow && attackBuffered && comboStep < maxCombo)
             {
                 attackBuffered = false;
                 bufferFramesLeft = 0;
                 comboStep++;
                 // StartAttack 内部已完成 ChangeState(Attack)，这里不能重复调用
                 StartAttack();
+                return;
             }
-            else
-            {
-                // 连招终止：必须清掉残留缓冲，否则回到 Idle 的瞬间会自动接出下一轮第一段
-                attackBuffered = false;
-                bufferFramesLeft = 0;
-                comboStep = 0;
-                ChangeState(CombatState.Idle);
-            }
+            if (!inWindow)
+        {
+            attackBuffered = false ;
+            bufferFramesLeft = 0;   
         }
+            if (actor.StateFrames >= currentAttack.recoveryFrames)
+        {
+            comboStep = 0;
+            ChangeState(CombatState.Idle);
+        }
+            
+        
     }
     private void UpdateHit()
     {
