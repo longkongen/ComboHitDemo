@@ -54,7 +54,7 @@ public class CombatController : MonoBehaviour
     // ===== 子类挂钩点 =====
     protected virtual void OnPreTick() { }
     protected virtual void OnIdleTick() { }                 // 玩家：查输入；木桩：数节拍
-    protected virtual void OnComboEnded() { }               // 回到 Idle 前（玩家：comboStep = 0）
+    protected virtual void OnComboEnded() { }               // 回到 Idle 前（玩家：清空当前链节点）
     protected virtual void ClearPendingInput() { }          // 被打断/死亡时清输入（玩家覆盖，木桩空实现）
 
     // ===== 一招的播放（子类不再各写一遍）=====

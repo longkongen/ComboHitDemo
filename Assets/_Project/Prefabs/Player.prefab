@@ -217,10 +217,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerCombat
   actor: {fileID: 5862847208909735581}
   inputBufferFrames: 30
-  combo:
-  - {fileID: 11400000, guid: c30488b10508a6f4da7ba15a5e4f7515, type: 2}
-  - {fileID: 11400000, guid: ed3e5e71b26c9b44593fe4fc24b11ddf, type: 2}
-  - {fileID: 11400000, guid: 793079184bc3cc3418a41cdc92bc367e, type: 2}
+  chain: {fileID: 11400000, guid: 5a2d9c7e1b3f4a6d8e0c2b4f6a8d1e3c, type: 2}
   attackHitbox: {fileID: 1853621454685411598}
 --- !u!114 &5862847208909735581
 MonoBehaviour:

@@ -1,7 +1,7 @@
 # ComboHitDemo · 开发路线图
 
 > 微高速动作 ACT Demo（Unity 6 / C#）：**连招 · GP · 极限闪避 · 相杀拼刀 · QTE 处决**
-> 最后更新：2026-10-13（阶段 3 完成；**阶段 4 连招系统进行中** —— 第 0 步连招窗口 + 取消语义、第 1 步共享 `CombatController` 均已落地，下一步 `ComboChain` SO）
+> 最后更新：2026-10-13（阶段 3 完成；**阶段 4 连招系统进行中** —— 第 0 步连招窗口 + 取消语义、第 1 步共享 `CombatController`、第 2 步 `ComboChain` SO 均已落地，下一步把输入迁到 `InputSystem_Actions`）
 
 ---
 
@@ -146,7 +146,15 @@
   - 顺手修：`CombatController.cs` 是第 5 个 GBK 文件 → 转 UTF-8 无 BOM（CRLF 119 / 裸 LF 0 / U+FFFD 0）；`EnemyCombat.cs` 缩进 8 → 4 空格
   - **新验证手法（可复用，不必等 Unity 获得焦点）**：`& 'D:\unity\6000.6.2f1\Editor\Data\DotNetSdk\dotnet.exe' build Assembly-CSharp.csproj -nologo -v:m`（Unity 自己生成的工程文件）→ 2.2 秒拿到 `0 个错误`（只有 7 条 nunit / 目标框架版本的历史警告）；产物落在 `Temp/bin/Debug/`，不碰 `Library/ScriptAssemblies/`
   - 验收靠"行为逐帧不变"（木桩节拍、10/15/25 伤害、12 帧硬直、死亡黄框、四行状态日志格式一字不差）+ 一条硬证据：**`git diff --stat` 里不出现 `Player.prefab` / `Enemy.prefab` / `SampleScene.unity`**（引用一个字都没动）
-- ⬜ 第 2 步：`ComboChain` SO（每段声明允许接什么）
+- ✅ 第 2 步：`ComboChain` SO（每段声明允许接什么）
+  - 新增 `Assets/_Project/Scripts/Combat/ComboChain.cs`：`[CreateAssetMenu(… menuName = "ComboHit/ComboChain")]`；嵌套 `[System.Serializable] class Node { public AttackData attack; public List<AttackData> next; }`；`entry` + `nodes` 两个序列化字段；`public AttackData NextOf(AttackData current, int candidateIndex = 0)`（当前段找不到节点 / 无候选 / 下标越界 → 返回 `null` = 链到头；`candidateIndex` 已留好，阶段 7 按输入挑候选即可分支）
+  - `OnValidate` 六条自检把数据错误拦在编辑器里：`entry` 为空 → 报错并返回；`entry` 不在节点表；某节点 `attack` 为空；某条边为空；**自环**（自己接自己 = 无限连）；**死边**（边指向的招式不在节点表里，永远接不到）
+  - 资产 `Assets/_Project/Data/ComboChain_Player.asset`（guid `5a2d9c7e1b3f4a6d8e0c2b4f6a8d1e3c`）：`entry = Attack_Slash1`；`Slash1 → [Slash2]`、`Slash2 → [Slash3]`、`Slash3 → []`；链的末端就是终点，`maxCombo` 常量退役
+  - `PlayerCombat`：`comboStep`（下标）→ `currentNode`（链上当前节点）+ `chainDepth`（本套已打出几段）；`Awake` 改为只校验 `chain == null || chain.Entry == null`（链本身的数据问题归 `OnValidate` 管）；新增 `private const int maxChainDepth = 16` —— 链是数据、写环也不会无限连，兜底时额外打一条 `LogWarning` 提示链里有环
+  - **`next == null` 也必须清输入缓冲**（与"窗口关闭"同处理）：否则关窗前按下的那一键会在收招末帧"自己接出来"，表现成"链到头却还能多打一段"
+  - `Player.prefab` 的 `combo:`（三个资产引用）换成一行 `chain:` ⇒ 这一步的 Prefab 改动只有这一处，字段名 `chain` 一旦改名，Unity 会按名反序列化失败、引用静默变 None
+  - 验收 7 条：① 三连伤害仍是 10/15/25（木桩 90→75→65）② 窗口行为照旧（`Attack_Slash3` 最后 3 帧按下不接）③ 链到头狂点不再出招、停手回 `Idle` ④ **数据驱动证明**：Inspector 里清空 `Slash2.next` ⇒ 第 2 段后不再接第 3 段，改回即恢复 ⑤ 木桩节拍不变（~2.3 秒一刀）⑥ 受击/死亡照旧（12 帧硬直、木桩死时判定盒黄框、玩家 `DEAD`）⑦ 反复进出 Play 3 次一致
+  - 编译验证用 `dotnet build Assembly-CSharp.csproj`（0 个错误）；EOL 核对 `PlayerCombat.cs` = `i/crlf w/crlf`（CRLF 99 / 裸 LF 0），脚本里 `comboStep|maxCombo|combo[|combo;` 残留为 0、场景里 `combo` 命中为 0
 - ⬜ 第 3 步：输入迁移到 `InputSystem_Actions`（删掉直读 `Mouse.current` / `Keyboard.current`）
 
 ## 5. 待定决策（到对应阶段再定，届时附上每种选法的代价）
@@ -172,6 +180,8 @@
 | 连招窗口内的行为：取消剩余收招（真 cancel）vs 等收招播完再切（窗口只做输入门） | ✅ **已定：取消剩余收招**（阶段 4 第 0 步）—— 收招是玩家的"责任时间"，接得上就有节奏、接不上就断；代价是连招总时长短于"收招全播 ×3"，阶段 8 的帧数优势窗口要按新规则重算 |
 | 连招接续关系：线性 `comboStep` 顺序 vs `ComboChain` SO（每段声明允许接什么）vs 完整连招图 | ✅ **已定：`ComboChain` SO**（阶段 4 第 2 步）—— 先保住线性 1→2→3 的数据形态，同时为分支（第 2 段后接重攻击/终结技）留位置；完整图等到有气刃与 GP 之后再谈 |
 | 共享招式播放器 `CombatController` 的抽取时机：本阶段 vs 阶段 5（GP）vs 不抽 | ✅ **已定：阶段 4 第 1 步就抽**（决策 3A）—— 现在两份状态机几乎相同，越晚抽越贵，且 `PlayerCombat` / `EnemyCombat` 容易行为漂移 |
+| 链的数据形态：每段只写"下一个" vs 节点 + 候选列表 vs 直接上完整连招图 | ✅ **已定：节点 + `List<AttackData> next`**（阶段 4 第 2 步）—— 现在只有一个攻击键 ⇒ 取候选第 0 项，等价线性 1→2→3；将来按输入（前/后/重击）索引候选即可分支，数据结构不用再改 |
+| 从 `combo` 数组迁移到 `ComboChain`：两套并存过渡 vs 直接替换 | ✅ **已定：直接替换**（阶段 4 第 2 步）—— 一次删净 `maxCombo` / `combo[comboStep-1]` / `comboStep`，只重接一次 Prefab 线；两套连招逻辑并存必然相互漂移 |
 | 击退方向：攻击者正前方 vs 攻击者→受击者连线 | ✅ **已定：攻击者正前方**（阶段 3 第 3 步）—— 侧面打也沿朝向推，连招落点可预测，且不会在两人重合时出现零向量退化 |
 | 木桩的移动方式：加 `CharacterController` + `EnemyMotor` vs 直接改 `transform.position` | ✅ **已定：加 CharacterController**（阶段 3 第 3 步）—— 与玩家共用同一套移动规则、有碰撞、有重力，将来给木桩加走位不必重做；代价是 Prefab 要删掉根上原来的 CapsuleCollider |
 | 表现层引入时机：边做机制边接模型/动画 vs 逻辑优先、表现后置 | ✅ **已定：逻辑优先，表现后置到阶段 11**（阶段 2）—— 帧数表在阶段 5/6/8 还会变动，现在做动画对表等于白干；当前只加「零资源反馈」（Gizmos 判定可视化 + 朝向指示物） |
@@ -205,6 +215,13 @@
 | 连招改为**取消语义**后，阶段 3 记录过的"帧数优势窗口"（例：Slash3 收招 21 帧 vs 硬直 20 帧）不再直接成立 | 8（阶段 4 第 0 步引入：收招可被取消 ⇒ 实际连段总时长变短，相杀/GP 的帧数比较要按新规则重算） |
 
 ## 7. 变更记录
+
+- **2026-10-13 · 阶段 4 第 2 步（`ComboChain` SO）**
+  - 连招从"代码里的数组 + 下标"变成"数据资产里的链"：新增 `ComboChain.cs`（`entry` + `nodes`，每段声明 `next` 候选列表）与 `ComboChain_Player.asset`（`Slash1 → Slash2 → Slash3`），`PlayerCombat` 只记 `currentNode` / `chainDepth`
+  - `OnValidate` 六条自检（entry 缺失/不在表、空招式、空边、自环、死边）+ 运行期 `maxChainDepth = 16` 兜底 ⇒ "数据写环导致无限连"这类错误在编辑器里就被拦下
+  - `comboStep`（下标）、`maxCombo`、`AttackData[] combo` 全部删除；`Player.prefab` 只改一行 `combo:` → `chain:`
+  - 这一步的价值不在玩法（行为与第 1 步逐帧一致）而在**数据形态**：分支连招（第 2 段后接重攻击/终结技）以后只是往 `next` 里加候选，不用碰代码
+  - 同时提交一次 Unity 自己的重新序列化（`DefaultVolumeProfile.asset` 多出 `filter` 字段、`URPProjectSettings.asset` 多出 `m_ProjectSettingFolderPath`）—— 与阶段 4 第 1 步引入的 URP 版本升级有关，与游戏逻辑无关
 
 - **2026-10-13 · 阶段 4 第 1 步（抽共享 `CombatController`）**
   - 新增 `CombatController` 基类（共享招式播放器），`PlayerCombat` / `EnemyCombat` 变薄壳：状态机只剩一份，阶段 5/6/8 的新机制以后只在一处加
