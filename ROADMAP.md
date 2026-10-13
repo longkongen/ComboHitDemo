@@ -1,7 +1,7 @@
 # ComboHitDemo · 开发路线图
 
 > 微高速动作 ACT Demo（Unity 6 / C#）：**连招 · GP · 极限闪避 · 相杀拼刀 · QTE 处决**
-> 最后更新：2026-10-13（阶段 3 完成；**阶段 4 连招系统进行中** —— 第 0 步连招窗口 + 取消语义、第 1 步共享 `CombatController`、第 2 步 `ComboChain` SO 均已落地，下一步把输入迁到 `InputSystem_Actions`）
+> 最后更新：2026-10-13（阶段 3 完成；**阶段 4 连招系统完成** —— 第 0 步连招窗口 + 取消语义、第 1 步共享 `CombatController`、第 2 步 `ComboChain` SO、第 3 步输入迁移到 `InputSystem_Actions` 均已落地；下一步进入**阶段 5 防御三件套**）
 
 ---
 
@@ -51,8 +51,8 @@
 | **1. 招式时间轴** | 攻击不再是硬编码秒数，而是「起手/判定/收招」可调 | 在 Inspector 改数值手感立刻变；能看到判定帧 | S–M | ✅ 完成 |
 | **2. 判定层 + 木桩敌人** | 第一次真正「打中」并掉血 | 攻击能打掉木桩血；木桩挥刀能打到我 | M | ✅ 完成 |
 | **3. 受击反馈与生死** | 挨打有硬直、击退、顿帧、能死 | 能打死木桩，也能被打死 | S–M | ✅ 完成 |
-| **4. 连招系统** | 三段连起来且「乱按不串招」 | 连按顺畅出 1→2→3；停手回 Idle | M | 🟡 进行中 |
-| **5. 防御三件套** | 闪避 / 极限闪避 / GP 都能用且回耐 | 闪避能穿攻击；极限闪避有提示并回耐；GP 能弹开并回耐 | M–L | ⬜ |
+| **4. 连招系统** | 三段连起来且「乱按不串招」 | 连按顺畅出 1→2→3；停手回 Idle | M | ✅ 完成 |
+| **5. 防御三件套** | 闪避 / 极限闪避 / GP 都能用且回耐 | 闪避能穿攻击；极限闪避有提示并回耐；GP 能弹开并回耐 | M–L | 🟡 进行中 |
 | **6. 一闪** | GP/极限闪避成功 → 反击 | GP 成功后按攻击键出一闪，直接打掉一大截血 | M | ⬜ |
 | **7. 气刃与特殊攻击** | 气刃资源 + 3 段气刃连段 + 段位 | 命中攒气、气刃连段打得出来、没气打不出 | M–L | ⬜ |
 | **8. 相杀 / 拼刀（核心）** | 气刃判定帧 ∩ 敌方攻击判定帧 → 双方对峙而非互掉血 | 敌人出招瞬间用气刃顶上去 → 触发 `Clash` 且本帧双方不掉血 | **L** | ⬜ |
@@ -130,7 +130,7 @@
   - 提交 `f5b5388`（6 文件 +12/−5，含两个 `R100` 重命名）
   - 教训：改含中文的源码用 `edit` 工具比 pwsh 精确匹配可靠（pwsh 里全角引号 `“ ”` 会让整段脚本无法解析；中文匹配串经命令行传输会对不上，报 `expected 1 match, got 0`）
 
-**阶段 4（进行中）**
+**阶段 4（已完成）**
 - ✅ 决策：**1A** 连招窗口 = `[判定结束, 收招结束 − comboWindowCloseEarly)`（派生 + 提前关窗，不做显式绝对帧字段，避免与 `startup/active/recovery` 重复）；**2A** 接续关系用 `ComboChain` SO 描述（每段声明"允许接什么"，为分支/终结技铺路）；**3A** 本阶段第 1 步就抽共享 `CombatController`（`PlayerCombat` / `EnemyCombat` 现在是两份几乎相同的状态机，阶段 5/6/8 还要往里加东西，现在抽最便宜）
 - ✅ 第 0 步：连招窗口规则化（**取消语义**）
   - `AttackData.comboWindowCloseEarly`（默认 0，`OnValidate` 夹 ≥0）+ 派生属性 `ComboWindowCloseFrame => Mathf.Max(0, recoveryFrames - comboWindowCloseEarly)`；只有 `Attack_Slash3` 实填 **3**（终结技最后 3 帧按了不接，收束感），其余三招取 C# 默认 0
@@ -155,7 +155,13 @@
   - `Player.prefab` 的 `combo:`（三个资产引用）换成一行 `chain:` ⇒ 这一步的 Prefab 改动只有这一处，字段名 `chain` 一旦改名，Unity 会按名反序列化失败、引用静默变 None
   - 验收 7 条：① 三连伤害仍是 10/15/25（木桩 90→75→65）② 窗口行为照旧（`Attack_Slash3` 最后 3 帧按下不接）③ 链到头狂点不再出招、停手回 `Idle` ④ **数据驱动证明**：Inspector 里清空 `Slash2.next` ⇒ 第 2 段后不再接第 3 段，改回即恢复 ⑤ 木桩节拍不变（~2.3 秒一刀）⑥ 受击/死亡照旧（12 帧硬直、木桩死时判定盒黄框、玩家 `DEAD`）⑦ 反复进出 Play 3 次一致
   - 编译验证用 `dotnet build Assembly-CSharp.csproj`（0 个错误）；EOL 核对 `PlayerCombat.cs` = `i/crlf w/crlf`（CRLF 99 / 裸 LF 0），脚本里 `comboStep|maxCombo|combo[|combo;` 残留为 0、场景里 `combo` 命中为 0
-- ⬜ 第 3 步：输入迁移到 `InputSystem_Actions`（删掉直读 `Mouse.current` / `Keyboard.current`）
+- ✅ 第 3 步：输入迁移到 `InputSystem_Actions`（删掉直读 `Mouse.current` / `Keyboard.current`）
+  - 新增 `Assets/_Project/Scripts/Character/PlayerInputSource.cs`（guid `989364db6f4c1374d9ad5f5af4ff41ef`）= 唯一输入读取点：`[DefaultExecutionOrder(-100)]` + `[SerializeField] InputActionAsset actions`（指向 `Assets/InputSystem_Actions.inputactions`，guid `052faaac586de48259a63d0c4782560b`）；`Awake` 里 `FindActionMap("Player", true)` + `Move` / `Attack` / `Look`，`OnEnable` / `OnDisable` 成对 `Enable()` / `Disable()`，`Update` 只采样（`if (moveAction == null) return;` 早退），对外 `Vector2 Move` / `Vector2 Look` / `bool AttackPressed` + `ConsumeAttack()`
+  - `PlayerCombat` / `PlayerMotor` 都改成从它读：攻击仍走原来的 30 帧输入缓冲（桥接语义不变，取用时 `ConsumeAttack()` 清零）；`PlayerMotor` 新增 `turnSensitivity = 0.2`（度/像素），鼠标 `Look` 的**增量**累加到 `pendingYaw`，逻辑帧里 `ApplyFacing(canMove)` 一次性消费并 `transform.rotation = Quaternion.Euler(0f, yaw, 0f)`（不要用 `Rotate` 累加，会攒误差）；`Hit` / `Dead` 期间锁转身并丢弃累积
+  - `Player.prefab` 根物体新增 `PlayerInputSource` 组件，`actions` 已指向输入资产（`m_Enabled: 1`）
+  - **WASD 失灵的根因（本次踩坑）**：`Player.prefab` 里 `PlayerMotor.input` 与 `PlayerCombat.input` 都是 `{fileID: 0}`，而 `PlayerMotor.Awake` 当时只自解析了 `controller` / `actor`、**漏了 `input`** ⇒ `input == null` ⇒ `moveInput` 永远是 `Vector2.zero`，**静默不动且不报错**（`PlayerCombat` 有自解析，所以鼠标攻击正常）。修法 = 补 `if (input == null) input = GetComponent<PlayerInputSource>();` + `LogError`（`PlayerMotor.Awake` / `PlayerCombat.Awake` 各一条）。**教训：同物体自解析要成套（`controller` / `actor` / `input`），缺引用必须响亮报错 —— 静默失灵最难查**
+  - 顺手清理：`PlayerInputSource.cs` 是第 6 个被编辑器存成 GBK 的脚本 → 转 UTF-8 无 BOM（1626 → 1675 字节，CRLF 40 / 裸 LF 0 / U+FFFD 0）；`PlayerMotor.cs` 行尾 mixed → LF（与索引 `i/lf` 一致）；删掉 `PlayerCombat.cs` 里 IDE 自动加的 `using UnityEngine.Windows;`
+  - 验收：`dotnet build Assembly-CSharp.csproj` 0 错误；用户在 Unity 里 Play 确认 WASD / 出招 / 鼠标转朝向正常（2026-10-13）
 
 ## 5. 待定决策（到对应阶段再定，届时附上每种选法的代价）
 
@@ -182,6 +188,9 @@
 | 共享招式播放器 `CombatController` 的抽取时机：本阶段 vs 阶段 5（GP）vs 不抽 | ✅ **已定：阶段 4 第 1 步就抽**（决策 3A）—— 现在两份状态机几乎相同，越晚抽越贵，且 `PlayerCombat` / `EnemyCombat` 容易行为漂移 |
 | 链的数据形态：每段只写"下一个" vs 节点 + 候选列表 vs 直接上完整连招图 | ✅ **已定：节点 + `List<AttackData> next`**（阶段 4 第 2 步）—— 现在只有一个攻击键 ⇒ 取候选第 0 项，等价线性 1→2→3；将来按输入（前/后/重击）索引候选即可分支，数据结构不用再改 |
 | 从 `combo` 数组迁移到 `ComboChain`：两套并存过渡 vs 直接替换 | ✅ **已定：直接替换**（阶段 4 第 2 步）—— 一次删净 `maxCombo` / `combo[comboStep-1]` / `comboStep`，只重接一次 Prefab 线；两套连招逻辑并存必然相互漂移 |
+| 输入读取的落点：各脚本各自读 `Keyboard.current` / `Mouse.current` vs 单一 `PlayerInputSource` 组件 | ✅ **已定：单一 `PlayerInputSource` 组件**（阶段 4 第 3 步）—— 开关（`Enable` / `Disable`）只有一处、空引用兜底只有一处；将来 GP / 闪避 / 一闪的按键都在这里加一行，不必满工程找 `Keyboard.current` |
+| 攻击输入的桥接方式：Action 状态直接喂状态机 vs 采样后转成本地输入缓冲 | ✅ **已定：保持输入缓冲**（阶段 4 第 3 步）—— 采样组件只暴露"这一渲染帧按下过"，`PlayerCombat` 立刻转成 30 帧缓冲，手感与阶段 1–3 完全一致；缓冲是"逻辑侧记忆"，不该由输入层持有 |
+| 鼠标 `Look` 的用途：这一步只控角色朝向 vs 顺便接管相机 | ✅ **已定：先只控角色朝向**（阶段 4 第 3 步）—— `Look` 增量驱动 `yaw`，判定盒与击退方向随朝向走；相机保持固定视角，完整的第三人称相机（跟随 + 角色朝移动方向）留单独一步，避免一次改两套坐标系 |
 | 击退方向：攻击者正前方 vs 攻击者→受击者连线 | ✅ **已定：攻击者正前方**（阶段 3 第 3 步）—— 侧面打也沿朝向推，连招落点可预测，且不会在两人重合时出现零向量退化 |
 | 木桩的移动方式：加 `CharacterController` + `EnemyMotor` vs 直接改 `transform.position` | ✅ **已定：加 CharacterController**（阶段 3 第 3 步）—— 与玩家共用同一套移动规则、有碰撞、有重力，将来给木桩加走位不必重做；代价是 Prefab 要删掉根上原来的 CapsuleCollider |
 | 表现层引入时机：边做机制边接模型/动画 vs 逻辑优先、表现后置 | ✅ **已定：逻辑优先，表现后置到阶段 11**（阶段 2）—— 帧数表在阶段 5/6/8 还会变动，现在做动画对表等于白干；当前只加「零资源反馈」（Gizmos 判定可视化 + 朝向指示物） |
@@ -203,7 +212,7 @@
 | `AttackHitbox` 缺"同一次挥击只结算一次"的去重 | ✅ 已解决（阶段 2 第 3 步：实例级 `HashSet<Hurtbox>`，`Activate` 时清空） |
 | 命中未扣血（`AttackHitbox` 只有日志，还没有 `Hurtbox` 与结算） | ✅ 已解决（阶段 2 第 3 步：经 `CombatResolver` → `CombatActor.TakeDamage`） |
 | 无 Tags/Layers 定义（Player / Enemy / Hitbox / Hurtbox） | ✅ 已解决（阶段 2 第 1 步） |
-| 「攻击」输入仍直读 `Mouse.current`，未使用 `InputSystem_Actions` 的 `Attack` Action | 4 |
+| 「攻击」输入仍直读 `Mouse.current`，未使用 `InputSystem_Actions` 的 `Attack` Action | ✅ 已解决（阶段 4 第 3 步：全部输入收进 `PlayerInputSource`，脚本里已无 `Keyboard.current` / `Mouse.current`） |
 | `AttackData.cs` 的 `menuName` 拼写为 `ComboHit/AttackDate` | ✅ 已解决（阶段 3 第 2 步：改为 `ComboHit/AttackData`） |
 | 脚本被编辑器存成 GBK（`AttackData.cs` 加中文 `Tooltip` 后成为第 4 个 GBK 文件，`read` 报 invalid UTF-8） | ✅ 已解决（阶段 3 第 2 步：转 UTF-8 无 BOM；发现手段 = `read` 工具直接报错 / 严格 UTF-8 解码校验） |
 | 木桩 Prefab 沿用 `Enemy` 命名，与规划里的 `TrainingDummy` 不一致 | 4 |
@@ -213,9 +222,15 @@
 | 招式资产缺 `hitStunFrames` 字段（运行期会取 C# 初始值，设计值与实际值可能不一致） | ✅ 已解决（阶段 3 第 1 步：4 个资产实填 10 / 14 / 20 / 12） |
 | `EnemyMotor.cs` 与 `PlayerMotor.cs` 是两份几乎相同的代码（重力 + 击退） | 4–7（等木桩需要走位 / 冲刺时再抽公共基类或独立 `Motor` 组件，过早抽象会把两者不同的输入来源硬拧到一起） |
 | 连招改为**取消语义**后，阶段 3 记录过的"帧数优势窗口"（例：Slash3 收招 21 帧 vs 硬直 20 帧）不再直接成立 | 8（阶段 4 第 0 步引入：收招可被取消 ⇒ 实际连段总时长变短，相杀/GP 的帧数比较要按新规则重算） |
+| 同物体引用自解析不成套（`controller` / `actor` / `input` 三类，漏一个就**静默失灵**） | ✅ 已解决（阶段 4 第 3 步：`PlayerMotor` 补 `input` 自解析 + `PlayerMotor` / `PlayerCombat` 各加一条 `LogError`；教训：缺引用必须响亮报错，否则表现成"按键没反应"） |
 
 ## 7. 变更记录
 
+- **2026-10-13 · 阶段 4 第 3 步（输入迁移到 `InputSystem_Actions`）· 阶段 4 完成**
+  - 输入从"各脚本自己读设备"收敛成一个组件：新增 `PlayerInputSource`（`Player` map 的 `Move` / `Attack` / `Look`），`Update`（order -100）只采样、逻辑帧消费；`PlayerCombat` 保留 30 帧输入缓冲（手感与阶段 1–3 一致），`PlayerMotor` 用鼠标 `Look` 的增量驱动 `yaw`（`turnSensitivity = 0.2` 度/像素），判定盒与击退方向随朝向走
+  - 踩坑：`PlayerMotor.input` 在 Prefab 里是空引用（`{fileID: 0}`），而 `Awake` 只自解析了 `controller` / `actor` ⇒ WASD **静默失灵**（`PlayerCombat` 有自解析，所以鼠标攻击正常）；两处补上同物体自解析 + `LogError`
+  - 顺手：第 6 个被编辑器存成 GBK 的脚本转 UTF-8 无 BOM、`PlayerMotor.cs` 行尾归一 LF、删掉 `PlayerCombat.cs` 里 IDE 自动加的 `using UnityEngine.Windows;`
+  - 阶段 4（连招系统）至此全部落地：连招窗口取消语义 → 共享 `CombatController` → `ComboChain` SO → 输入迁移；技术债「攻击输入直读 `Mouse.current`」结清
 - **2026-10-13 · 阶段 4 第 2 步（`ComboChain` SO）**
   - 连招从"代码里的数组 + 下标"变成"数据资产里的链"：新增 `ComboChain.cs`（`entry` + `nodes`，每段声明 `next` 候选列表）与 `ComboChain_Player.asset`（`Slash1 → Slash2 → Slash3`），`PlayerCombat` 只记 `currentNode` / `chainDepth`
   - `OnValidate` 六条自检（entry 缺失/不在表、空招式、空边、自环、死边）+ 运行期 `maxChainDepth = 16` 兜底 ⇒ "数据写环导致无限连"这类错误在编辑器里就被拦下

@@ -83,6 +83,7 @@ GameObject:
   - component: {fileID: 6089167818484106202}
   - component: {fileID: 2541319228010464586}
   - component: {fileID: 5862847208909735581}
+  - component: {fileID: 7217611073987130791}
   m_Layer: 8
   m_Name: Player
   m_TagString: Untagged
@@ -178,6 +179,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerMotor
   moveSpeed: 5
   gravity: -20
+  actor: {fileID: 0}
+  turnSensitivity: 0.2
+  input: {fileID: 0}
 --- !u!143 &6089167818484106202
 CharacterController:
   m_ObjectHideFlags: 0
@@ -216,9 +220,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerCombat
   actor: {fileID: 5862847208909735581}
+  attackHitbox: {fileID: 1853621454685411598}
   inputBufferFrames: 30
   chain: {fileID: 11400000, guid: 5a2d9c7e1b3f4a6d8e0c2b4f6a8d1e3c, type: 2}
-  attackHitbox: {fileID: 1853621454685411598}
+  input: {fileID: 0}
 --- !u!114 &5862847208909735581
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -233,6 +238,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CombatActor
   state: 0
   hp: 100
+--- !u!114 &7217611073987130791
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7094994867838083736}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 989364db6f4c1374d9ad5f5af4ff41ef, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerInputSource
+  actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
 --- !u!1 &8220848220105198918
 GameObject:
   m_ObjectHideFlags: 0

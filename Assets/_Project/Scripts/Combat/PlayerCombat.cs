@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 public class PlayerCombat : CombatController
 {
@@ -11,7 +10,9 @@ public class PlayerCombat : CombatController
 
     [SerializeField] private ComboChain chain;
     private AttackData currentNode;         // 链上当前节点（null = 没有连招在进行中）
-    private int chainDepth;                 // 本套连招已打出几段
+    private int chainDepth;// 本套连招已打出几段
+    [SerializeField]
+    private PlayerInputSource input;
 
     protected override void Awake()
     {
@@ -23,6 +24,8 @@ public class PlayerCombat : CombatController
             Debug.LogError("[PlayerCombat] chain 未接线（或 entry 为空）", this);
             enabled = false;
         }
+        if (input == null) input = GetComponent<PlayerInputSource>();
+        if (input == null) Debug.LogError("[PlayerCombat] missing PlayerInputSource -> attack input will not work", this);
     }
 
     private void Update() { CheckAttackInput(); }        // 渲染帧只采样，不进状态机
@@ -76,12 +79,10 @@ public class PlayerCombat : CombatController
 
     private void CheckAttackInput()
     {
-        if (Mouse.current == null) return;
-        if (Mouse.current.leftButton.wasPressedThisFrame)
-        {
-            attackBuffered = true;
-            bufferFramesLeft = inputBufferFrames;
-        }
+        if (input == null || !input.AttackPressed) return;
+        input.ConsumeAttack();
+        attackBuffered = true;
+        bufferFramesLeft = inputBufferFrames;
     }
 
     private void UpdateInputBuffer()
