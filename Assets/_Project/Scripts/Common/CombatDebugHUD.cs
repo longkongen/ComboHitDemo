@@ -110,6 +110,14 @@ public class CombatDebugHUD : MonoBehaviour
                 span  = gpWin;
                 break;
             }
+            case CombatState.Dodge:
+            {
+                // 前 invulnFrames 帧无敌（挨刀会闪过），之后到 totalFrames 是破绽
+                int inv = (actor.Dodge != null) ? actor.Dodge.InvulnFrames : 0;
+                phase = (e < inv) ? "INVULN  " : "DODGE   ";
+                span  = (actor.Dodge != null) ? actor.Dodge.TotalFrames : 0;
+                break;
+            }
             case CombatState.Dead:
                 phase = "DEAD    ";
                 span  = 0;

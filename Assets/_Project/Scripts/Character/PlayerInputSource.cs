@@ -9,10 +9,13 @@ public class PlayerInputSource : MonoBehaviour
     private InputAction attackAction;
     private InputAction lookAction;
     private InputAction guardAction;
+    private InputAction dodgeAction;
 
     public bool GuardHeld { get; private set; }
     public bool GuardPressed {  get; private set; }
     public void ConsumeGuardPress() { GuardPressed = false; }
+    public bool DodgePressed { get; private set; }
+    public void ConsumeDodge() { DodgePressed = false; }
     public Vector2 Move { get; private set; }
     public Vector2 Look { get; private set; }             // 本渲染帧的鼠标/右摇杆位移（增量）
     public bool AttackPressed { get; private set; }        // 本渲染帧按下过
@@ -26,12 +29,15 @@ public class PlayerInputSource : MonoBehaviour
         attackAction = map.FindAction("Attack", true);
         lookAction = map.FindAction("Look", true);
         guardAction = new InputAction("Guard",InputActionType.Button);
-        guardAction.AddBinding("<Mouse>/rightButton");
-        guardAction.AddBinding("<Keyboard>/leftShift");
+        guardAction.AddBinding("<Mouse>/rightButton");     // 防御只认右键（左 Shift 已归闪避）
+
+        // 闪避：同样用代码新建（不动 .inputactions 资产，零导入风险）
+        dodgeAction = new InputAction("Dodge", InputActionType.Button);
+        dodgeAction.AddBinding("<Keyboard>/leftShift");
     }
 
-    private void OnEnable() { moveAction?.Enable(); attackAction?.Enable(); lookAction?.Enable();guardAction?.Enable(); }
-    private void OnDisable() { moveAction?.Disable(); attackAction?.Disable(); lookAction?.Disable();guardAction?.Disable(); }
+    private void OnEnable() { moveAction?.Enable(); attackAction?.Enable(); lookAction?.Enable();guardAction?.Enable(); dodgeAction?.Enable(); }
+    private void OnDisable() { moveAction?.Disable(); attackAction?.Disable(); lookAction?.Disable();guardAction?.Disable(); dodgeAction?.Disable(); }
 
 
 
@@ -46,6 +52,7 @@ public class PlayerInputSource : MonoBehaviour
             GuardHeld = guardAction.IsPressed();
             if(guardAction.WasPressedThisFrame()) GuardPressed = true;
         }
+        if (dodgeAction != null && dodgeAction.WasPressedThisFrame()) DodgePressed = true;
     }
 
     public void ConsumeAttack() { AttackPressed = false; }

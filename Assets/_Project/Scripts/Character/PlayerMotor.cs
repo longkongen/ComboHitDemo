@@ -52,10 +52,11 @@ public class PlayerMotor : MonoBehaviour
 
     private void OnCombatTick(int frame)
     {
-        // 硬直 / 死亡 / 防御期间：锁水平位移（重力与击退照常，见下面两行）
+        // 硬直 / 死亡 / 防御 / 闪避 期间：锁水平位移（闪避的位移由 DodgeSystem 负责；重力与击退照常，见下面两行）
         bool canMove = (actor == null) || (actor.State != CombatState.Hit
                                         && actor.State != CombatState.Dead
-                                        && actor.State != CombatState.Guard);
+                                        && actor.State != CombatState.Guard
+                                        && actor.State != CombatState.Dodge);
         ApplyFacing(canMove);   // 硬直/死亡期间转身也被锁，并丢弃这段时间累积的位移
         if (canMove) Move();
         ApplyKnockback();

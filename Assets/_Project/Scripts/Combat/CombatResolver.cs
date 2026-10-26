@@ -6,6 +6,15 @@ public static class CombatResolver//判定仲裁
         if (attacker == null || defender == null || attack == null) return;
         if (attacker == defender) return;
         if (defender.IsDead) return;
+
+        // 无敌帧（阶段 5 第 3 步）：闪避前 9 帧内完全不吃判定
+        DodgeSystem dodge = defender.Dodge;
+        if (dodge != null && dodge.IsInvulnerable)
+        {
+            Debug.Log($"[DodgeSystem] {defender.name} 无敌帧内闪过 {attack.attackName}");
+            return;                                                      // ← 阶段 5 第 4 步：极限闪避的判定与奖励插在这里
+        }
+
         Vector3 knockbackDir = attacker.transform.forward;
         knockbackDir.y = 0f;
         if (knockbackDir.sqrMagnitude < 0.0001f) knockbackDir = Vector3.forward;

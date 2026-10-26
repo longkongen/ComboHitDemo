@@ -21,6 +21,17 @@ public class CombatActor : MonoBehaviour
         }
     }
 
+    // 可选：闪避组件。木桩没有 DodgeSystem，所以同样允许为空（绝不 LogError）
+    [SerializeField] private DodgeSystem dodge;
+    public DodgeSystem Dodge
+    {
+        get
+        {
+            if (dodge == null) dodge = GetComponent<DodgeSystem>();
+            return dodge;
+        }
+    }
+
     public CombatState State => state;
     private AttackData lastHit;
     public AttackData LastHit => lastHit;

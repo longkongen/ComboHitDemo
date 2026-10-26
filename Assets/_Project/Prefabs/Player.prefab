@@ -86,6 +86,7 @@ GameObject:
   - component: {fileID: 7217611073987130791}
   - component: {fileID: 525256176227649411}
   - component: {fileID: 4713829561027384625}
+  - component: {fileID: 6183729045513682957}
   m_Layer: 8
   m_Name: Player
   m_TagString: Untagged
@@ -421,3 +422,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Hurtbox
   owner: {fileID: 5862847208909735581}
   guardOnly: 1
+--- !u!114 &6183729045513682957
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7094994867838083736}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6c5edb6ccb0a5774fb19b159d19f38dc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DodgeSystem
+  staminaCost: 25
+  invulnFrames: 9
+  totalFrames: 18
+  distance: 2

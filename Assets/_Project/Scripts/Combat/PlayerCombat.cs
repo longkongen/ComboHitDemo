@@ -14,6 +14,8 @@ public class PlayerCombat : CombatController
     [SerializeField]
     private PlayerInputSource input;
 
+    [SerializeField] private DodgeSystem dodge;
+
     protected override void Awake()
     {
         base.Awake();                       // ← 必须先调：基类的引用校验 + enabled=false 都在里面
@@ -26,11 +28,42 @@ public class PlayerCombat : CombatController
         }
         if (input == null) input = GetComponent<PlayerInputSource>();
         if (input == null) Debug.LogError("[PlayerCombat] missing PlayerInputSource -> attack input will not work", this);
+
+        if (dodge == null) dodge = GetComponent<DodgeSystem>();
+        if (dodge == null) Debug.LogError("[PlayerCombat] missing DodgeSystem -> dodge input will not work", this);
     }
 
     private void Update() { CheckAttackInput(); }        // 渲染帧只采样，不进状态机
 
-    protected override void OnPreTick() { UpdateInputBuffer(); }
+    protected override void OnPreTick()
+    {
+        UpdateInputBuffer();
+        TryConsumeDodgeInput();      // 闪避优先级最高：攻击/收招中途也能取消
+    }
+
+    // 决策 A：Idle / Attack / Recovery / Guard 都能被闪避取消（Hit / Dead 不行）
+    private void TryConsumeDodgeInput()
+    {
+        if (input == null || !input.DodgePressed) return;
+        input.ConsumeDodge();
+
+        CombatState st = actor.State;
+        bool canCancel = (st == CombatState.Idle) || (st == CombatState.Attack) ||
+                         (st == CombatState.Recovery) || (st == CombatState.Guard);
+        if (!canCancel) return;
+
+        if (dodge == null || !dodge.TryStart(input.Move)) return;   // 耐力不足 → 这次闪不出来，状态不变
+
+        attackHitbox.Deactivate();      // 取消出招时判定盒必须立刻关，否则闪避途中还能打到人
+        ClearPendingInput();            // 连招进度与输入缓冲一起清（本 tick 也不要再出招）
+        ChangeState(CombatState.Dodge);
+    }
+
+    protected override void TickDodge()
+    {
+        // 位移与无敌帧都在 DodgeSystem 里，这里只负责收尾
+        if (dodge == null || actor.StateFrames >= dodge.TotalFrames) ChangeState(CombatState.Idle);
+    }
 
     protected override void OnIdleTick()
     {
