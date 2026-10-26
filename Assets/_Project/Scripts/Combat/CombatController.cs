@@ -47,6 +47,7 @@ public class CombatController : MonoBehaviour
             case CombatState.Attack: TickAttack(); break;
             case CombatState.Recovery: TickRecovery(); break;
             case CombatState.Hit: TickHit(); break;
+            case CombatState.Guard: TickGuard(); break;
             default: OnIdleTick(); break;   // Idle（以及将来别的空闲态）交给子类
         }
     }
@@ -54,6 +55,7 @@ public class CombatController : MonoBehaviour
     // ===== 子类挂钩点 =====
     protected virtual void OnPreTick() { }
     protected virtual void OnIdleTick() { }                 // 玩家：查输入；木桩：数节拍
+    protected virtual void TickGuard() { }                  // 玩家：松手就回 Idle；木桩永远不进这个状态
     protected virtual void OnComboEnded() { }               // 回到 Idle 前（玩家：清空当前链节点）
     protected virtual void ClearPendingInput() { }          // 被打断/死亡时清输入（玩家覆盖，木桩空实现）
 
@@ -113,6 +115,9 @@ public class CombatController : MonoBehaviour
                 break;
             case CombatState.Recovery:
                 Debug.Log($"进入 Recovery（收招 {currentAttack.recoveryFrames} 帧）");
+                break;
+            case CombatState.Guard:
+                Debug.Log("进入 Guard");     // 不加这条，每次防御都会刷"未处理的状态迁移"
                 break;
             default:
                 Debug.LogWarning($"[{GetType().Name}] 未处理的状态迁移：{next}", this);

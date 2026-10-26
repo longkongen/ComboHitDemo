@@ -9,6 +9,18 @@ public class CombatActor : MonoBehaviour
     public float Hp => hp;
     public bool IsDead => hp <= 0f;
 
+    // 可选：普通防御组件。木桩没有 GuardSystem，所以允许为空（这里绝不 LogError），
+    // 用惰性自解析而不是 Awake，是因为 CombatActor 目前没有 Awake，也不想为一个可选项加一条生命周期。
+    [SerializeField] private GuardSystem guard;
+    public GuardSystem Guard
+    {
+        get
+        {
+            if (guard == null) guard = GetComponent<GuardSystem>();
+            return guard;
+        }
+    }
+
     public CombatState State => state;
     private AttackData lastHit;
     public AttackData LastHit => lastHit;

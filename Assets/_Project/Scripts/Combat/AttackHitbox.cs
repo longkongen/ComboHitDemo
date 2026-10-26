@@ -8,8 +8,9 @@ public class AttackHitbox : MonoBehaviour
     private CombatActor owner;
     [SerializeField]
     private BoxCollider shape;
-    private readonly HashSet<Hurtbox> hitTargets = new HashSet<Hurtbox>();  // 本次挥击已结算过的目标
-    private readonly Collider[] results = new Collider[16];                 // 复用数组，别每帧 new
+    private readonly HashSet<Hurtbox> hitTargets = new HashSet<Hurtbox>();     // 本次挥击已结算过的目标
+    private readonly HashSet<CombatActor> blockedActors = new HashSet<CombatActor>(); // 本次挥击已被格挡盒挡下的目标
+    private readonly Collider[] results = new Collider[16];                    // 复用数组，别每帧 new
     private int hurtboxMask;
     private AttackData currentAttack;
     private bool isActive = false;
@@ -26,6 +27,7 @@ public class AttackHitbox : MonoBehaviour
     {
         currentAttack = attack;
         hitTargets.Clear();
+        blockedActors.Clear();
         isActive = true;
         CheckHit();
     }
@@ -41,14 +43,30 @@ public class AttackHitbox : MonoBehaviour
             center, halfExtents, results, shape.transform.rotation,
             hurtboxMask, QueryTriggerInteraction.Collide);
 
+        // 第一遍：格挡盒。自己的攻击盒与对方的格挡盒相交 = 这一击被挡下（方向性由格挡盒的摆放与朝向决定）
+        for (int i = 0; i < count; i++)
+        {
+            Hurtbox hurtbox = results[i].GetComponentInParent<Hurtbox>();
+            if (hurtbox == null || !hurtbox.GuardOnly) continue;
+            CombatActor defender = hurtbox.Owner;
+            if (defender == null || defender == owner) continue;
+            if (defender.IsDead) continue;
+            if (blockedActors.Contains(defender)) continue;
+
+            if (CombatResolver.ResolveGuard(owner, defender, currentAttack)) blockedActors.Add(defender);
+        }
+
+        // 第二遍：普通受击盒。已被格挡盒挡下的目标，这一击不再打身体
         for (int i = 0; i < count; i++)
         {
             Hurtbox hurtbox = results[i].GetComponentInParent<Hurtbox>();
             if (hurtbox == null) continue;
+            if (hurtbox.GuardOnly) continue;             // 格挡盒不参与“打身体”
             if (hurtbox.Owner == null) continue;
             if (hurtbox.Owner == owner) continue;        // 不打自己
+            if (blockedActors.Contains(hurtbox.Owner)) continue;
             if (hitTargets.Contains(hurtbox)) continue;  // 同一次挥击只结算一次
-            if (hurtbox.Owner.IsDead) continue;          //不打尸体
+            if (hurtbox.Owner.IsDead) continue;          // 不打尸体
 
             hitTargets.Add(hurtbox);
             CombatResolver.ResolveHit(owner, hurtbox.Owner, currentAttack);

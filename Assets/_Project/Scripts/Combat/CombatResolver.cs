@@ -13,7 +13,28 @@ public static class CombatResolver//判定仲裁
 
         defender.ReceiveHit(attack, knockbackDir);// 伤害 + 硬直都收敛到 CombatActor
         CombatClock.RequestHitStop(attack.hitStopFrames);
-        // ← 阶段 3 第 3 步：击退
-        // ← 阶段 5/6/8：GP / 极限闪避 / 相杀的拦截都插在这里
+        // ← 阶段 5 第 2 步：GP 的拦截插在这里（必须排在普通格挡之前，GP 才能赢过普通格挡）
+        // ← 阶段 6-8：极限闪避 / 相杀的拦截插在这里
+    }
+
+    // 格挡：只有「格挡盒」被攻方的攻击盒扫到时才会走到这里。
+    // 方向性来自格挡盒的摆放与朝向（摆在角色前方、随角色 yaw 旋转），不是靠角度判断。
+    public static bool ResolveGuard(CombatActor attacker, CombatActor defender, AttackData attack)
+    {
+        if (attacker == null || defender == null || attack == null) return false;
+        if (attacker == defender) return false;
+        if (defender.IsDead) return false;
+
+        GuardSystem guard = defender.Guard;
+        if (guard == null)
+        {
+            // 有格挡盒却没有 GuardSystem：防御会静默失效，必须响亮报出来
+            Debug.LogError($"[CombatResolver] {defender.name} 有格挡盒但没有 GuardSystem 组件 -> 格挡无效（检查 Prefab 上是否真的挂了这个组件）", defender);
+            return false;
+        }
+        if (!guard.TryBlock(attack)) return false;      // 没有处于防御态 / 耐力付不起 => 挡不住
+
+        CombatClock.RequestHitStop(guard.BlockHitStopFrames);   // 挡下的小顿帧
+        return true;                                            // 不调 ReceiveHit = 无伤害、无硬直
     }
 }

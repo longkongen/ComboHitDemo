@@ -8,7 +8,11 @@ public class PlayerInputSource : MonoBehaviour
     private InputAction moveAction;
     private InputAction attackAction;
     private InputAction lookAction;
+    private InputAction guardAction;
 
+    public bool GuardHeld { get; private set; }
+    public bool GuardPressed {  get; private set; }
+    public void ConsumeGuardPress() { GuardPressed = false; }
     public Vector2 Move { get; private set; }
     public Vector2 Look { get; private set; }             // 本渲染帧的鼠标/右摇杆位移（增量）
     public bool AttackPressed { get; private set; }        // 本渲染帧按下过
@@ -21,10 +25,13 @@ public class PlayerInputSource : MonoBehaviour
         moveAction = map.FindAction("Move", true);
         attackAction = map.FindAction("Attack", true);
         lookAction = map.FindAction("Look", true);
+        guardAction = new InputAction("Guard",InputActionType.Button);
+        guardAction.AddBinding("<Mouse>/rightButton");
+        guardAction.AddBinding("<Keyboard>/leftShift");
     }
 
-    private void OnEnable() { moveAction?.Enable(); attackAction?.Enable(); lookAction?.Enable(); }
-    private void OnDisable() { moveAction?.Disable(); attackAction?.Disable(); lookAction?.Disable(); }
+    private void OnEnable() { moveAction?.Enable(); attackAction?.Enable(); lookAction?.Enable();guardAction?.Enable(); }
+    private void OnDisable() { moveAction?.Disable(); attackAction?.Disable(); lookAction?.Disable();guardAction?.Disable(); }
 
 
 
@@ -34,6 +41,11 @@ public class PlayerInputSource : MonoBehaviour
         Move = moveAction.ReadValue<Vector2>();
         Look = lookAction.ReadValue<Vector2>();
         if (attackAction.WasPressedThisFrame()) AttackPressed = true;
+        if(guardAction != null)
+        {
+            GuardHeld = guardAction.IsPressed();
+            if(guardAction.WasPressedThisFrame()) GuardPressed = true;
+        }
     }
 
     public void ConsumeAttack() { AttackPressed = false; }

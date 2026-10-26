@@ -102,6 +102,10 @@ public class CombatDebugHUD : MonoBehaviour
                 phase = "HIT     ";
                 span  = (actor.LastHit != null) ? actor.LastHit.hitStunFrames : 0;
                 break;
+            case CombatState.Guard:
+                phase = "GUARD   ";
+                span  = 0;
+                break;
             case CombatState.Dead:
                 phase = "DEAD    ";
                 span  = 0;

@@ -34,12 +34,33 @@ public class PlayerCombat : CombatController
 
     protected override void OnIdleTick()
     {
-        if (!attackBuffered) return;
+        // 攻击优先：按着防御键时按下攻击也能出手
+        if (TryStartBufferedAttack()) return;
+
+        // 其次：按住防御键进普通防御（本步不做"攻击中取消进防御"，要等收招播完才回到这里）
+        if (input != null && input.GuardHeld) ChangeState(CombatState.Guard);
+    }
+
+    protected override void TickGuard()
+    {
+        // 防御中按下攻击 -> 立刻出招（不必先松手）
+        if (TryStartBufferedAttack()) return;
+
+        // 松手回 Idle。这里刻意**不清**输入缓冲：防御中按下的攻击键会在松手那一帧立刻出招，这是想要的响应性
+        if (input == null || !input.GuardHeld) ChangeState(CombatState.Idle);
+    }
+
+    // 从链的 entry 起手；返回 true 表示这一 tick 用掉了输入缓冲
+    private bool TryStartBufferedAttack()
+    {
+        if (!attackBuffered) return false;
+
         attackBuffered = false;
         bufferFramesLeft = 0;
         currentNode = chain.Entry;          // 每次起手都从链的 entry 开始
         chainDepth = 1;
         StartAttack(currentNode);
+        return true;
     }
 
     protected override void TickRecovery()

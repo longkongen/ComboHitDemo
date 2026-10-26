@@ -1,7 +1,7 @@
 # ComboHitDemo · 开发路线图
 
 > 微高速动作 ACT Demo（Unity 6 / C#）：**连招 · GP · 极限闪避 · 相杀拼刀 · QTE 处决**
-> 最后更新：2026-10-13（阶段 4 连招系统完成；**阶段 5 防御三件套进行中** —— 第 0 步耐力地基 `StaminaSystem` + HUD 已落地，下一步普通防御 `GuardSystem`）
+> 最后更新：2026-10-13（阶段 4 连招系统完成；**阶段 5 防御三件套进行中** —— 第 0 步耐力地基 + 第 1 步普通防御（含前方格挡盒）已落地，下一步 GP 窗口 + 弹开）
 
 ---
 
@@ -178,7 +178,15 @@
   - HUD 玩家/敌人行尾各加 `STAM xxx/100`（`CombatDebugHUD` 从已有的 `player` / `enemy` 引用 `GetComponent<StaminaSystem>()` 取，不新增手拖字段；取不到显示 `STAM n/a` = Prefab 漏挂的显式信号）
   - 暂留两个 `[ContextMenu]` 调试钩子（`Debug: 花 30 耐力` / `Debug: 回 40 耐力`），第 1 步接入真正的消耗者时删除
   - 验收：HUD 出现 `STAM 100/100`、花 30 立刻变 70 且 Console `TrySpend(30) = True，剩余 70`、之后 30 帧不动再按 25/秒回、花到 0 后 `TrySpend` 返回 `False` 且不会变负、`Debug: 回 40` 封顶 100、反复进出 Play 3 次开局满耐（用户 2026-10-13 确认通过）
-- ⬜ 第 1 步：普通防御（`GuardSystem` + `CombatResolver` 拦截）
+- ✅ 第 1 步：普通防御（`GuardSystem` + 前方格挡盒 + `CombatResolver.ResolveGuard`）
+  - 防御键进 `PlayerInputSource`：代码里新建 `InputAction("Guard")`（`<Mouse>/rightButton` + `<Keyboard>/leftShift`），不动那个 1077 行的 `.inputactions` 资产；对外只暴露 `GuardHeld` / `GuardPressed` / `ConsumeGuardPress()`
+  - `GuardSystem`：`blockStaminaCost = 10` / `blockHitStopFrames = 2` / `guardDamageMultiplier = 0`；`IsGuardActive`（`Guard` 或 `GuardPoint` 状态）判定 + `TryBlock(attack)`（耐力不够就挡不住）；挡下时打 `[GuardSystem] {name} 挡下 {招式}：扣 10 耐力，剩余 90`
+  - **格挡从"按状态 360° 拦截"改成"前方真实格挡盒"**（用户定制需求：要"拿武器挡住对方武器"的方向感）：`Player.prefab` 新增子物体 `GuardBox`（Layer = `Hurtbox`、`isTrigger`、位于角色前方 `z = 0.75 m`、尺寸 `1.6 × 1.6 × 1.0 m`），挂在 Player 根下 ⇒ 随 `yaw` 一起转
+  - `Hurtbox` 加 `guardOnly` 标记区分"格挡盒 / 身体"（Gizmos：橙 = 格挡盒、青 = 受击盒、洋红 = owner 未接线）；`AttackHitbox` 改**两遍扫描**（先格挡盒 → `CombatResolver.ResolveGuard`，再身体，已被挡下的目标这一击不再打身体，`blockedActors` 去重）
+  - `CombatResolver` 拆出 `ResolveGuard(attacker, defender, attack)`：`ResolveHit` 不再无条件吞掉"防御中的命中"，只有格挡盒相交才挡 ⇒ 绕背砍中身体照常掉血 + 硬直（方向性验收点）
+  - 防御期间用 `PlayerMotor` 的 `canMove` 一起锁位移与转身（与 `Hit` / `Dead` 同一套规则）；防御中按攻击可立刻出招（不必先松手）
+  - 踩坑记录：① 用户手写的 `AddBinding("<Keyboarf>/leftShift")` 拼错，Input System 会在 `Enable()` 时丢 binding ⇒ 右键防御整条失效；② "耐力没有扣除"的真因是**格挡盒没被扫到**（防御时木桩的刀都挥空了），不是扣耐力逻辑坏 —— 判定是几何相交，不是"按了键就掉耐"
+  - 验收：正面按住右键 ⇒ 每挡一下 `STAM` −10 且 `HP` 不动、Console 出 `[GuardSystem]`；用鼠标把木桩转到背后仍按住右键 ⇒ **挡不住**、照常掉血进硬直；不按右键时橙框不参与判定；耐力花光后挡不住（用户 2026-10-13 确认通过）
 - ⬜ 第 2 步：GP 窗口 + 弹开（按被弹开招式给攻方硬直 + 双方顿帧 + 防守方回耐）
 - ⬜ 第 3 步：闪避位移 + 无敌帧（`DodgeSystem`）
 - ⬜ 第 4 步：极限闪避（`PerfectDodge` + 回耐 + 长顿帧 + HUD 提示）
@@ -214,6 +222,8 @@
 | 防御键位：攻击/防御分两个键 vs 一键两用（前 8 帧 GP、按住普通防御） | ✅ **已定：一键两用**（阶段 5，决策 A）—— 少一个键位、更接近"抓到格挡点"的手感；代价是"按住不放"与"踩点按下"要在表现上区分（盾光 / 音效），且玩家可能一直按住吃减伤 |
 | GP 成功的效果：只弹开（双方都不断） vs 攻方进硬直 + 双方顿帧 + 防守方回耐 | ✅ **已定：攻方进硬直 + 双方顿帧 + 回耐**（阶段 5，决策 A）—— GP 的收益必须"看得见、能接后续"（攻方硬直窗口就是反击窗口，也是阶段 6 一闪的入口）；代价是攻方在硬直里更容易被连招 |
 | 闪避的无敌与极限闪避判定：全程无敌 vs 只前 9 帧无敌；按"我按得早/晚" vs 按"对方判定帧前 N 帧" | ✅ **已定：前 9 帧无敌 + 对方判定帧开始前 6 帧内算极限闪避**（阶段 5，决策 A）—— 无敌帧有限才有择时压力；用"对方判定帧"而不是"我按键的时刻"来判定，才不受输入延迟与帧率影响 |
+| 格挡的判定语义：按状态 360° 拦截 vs 前方真实格挡盒（碰撞体） | ✅ **已定：前方格挡盒**（阶段 5 第 1 步，用户定制）—— 按状态拦截简单，但"背后砍你也挡住"没有方向感；改成 `GuardBox` 子物体后"武器挡住武器"是几何事实。代价：格挡范围变成要调的手感参数（Inspector 改 `BoxCollider` 的 Size / `z`），且绕背或挥空时挡不住是**预期行为** |
+| 格挡盒与身体的结算顺序：一遍扫描 vs 两遍扫描 | ✅ **已定：两遍扫描（先格挡盒、再身体）**（阶段 5 第 1 步）—— 同一挥击里两个盒子可能同时相交，先算格挡再用 `blockedActors` 跳过身体，结果与 `OverlapBox` 返回顺序无关；写成一遍会抖动（同一刀有时挡下、有时被打破防） |
 | 击退方向：攻击者正前方 vs 攻击者→受击者连线 | ✅ **已定：攻击者正前方**（阶段 3 第 3 步）—— 侧面打也沿朝向推，连招落点可预测，且不会在两人重合时出现零向量退化 |
 | 木桩的移动方式：加 `CharacterController` + `EnemyMotor` vs 直接改 `transform.position` | ✅ **已定：加 CharacterController**（阶段 3 第 3 步）—— 与玩家共用同一套移动规则、有碰撞、有重力，将来给木桩加走位不必重做；代价是 Prefab 要删掉根上原来的 CapsuleCollider |
 | 表现层引入时机：边做机制边接模型/动画 vs 逻辑优先、表现后置 | ✅ **已定：逻辑优先，表现后置到阶段 11**（阶段 2）—— 帧数表在阶段 5/6/8 还会变动，现在做动画对表等于白干；当前只加「零资源反馈」（Gizmos 判定可视化 + 朝向指示物） |
@@ -246,9 +256,18 @@
 | `EnemyMotor.cs` 与 `PlayerMotor.cs` 是两份几乎相同的代码（重力 + 击退） | 4–7（等木桩需要走位 / 冲刺时再抽公共基类或独立 `Motor` 组件，过早抽象会把两者不同的输入来源硬拧到一起） |
 | 连招改为**取消语义**后，阶段 3 记录过的"帧数优势窗口"（例：Slash3 收招 21 帧 vs 硬直 20 帧）不再直接成立 | 8（阶段 4 第 0 步引入：收招可被取消 ⇒ 实际连段总时长变短，相杀/GP 的帧数比较要按新规则重算） |
 | 同物体引用自解析不成套（`controller` / `actor` / `input` 三类，漏一个就**静默失灵**） | ✅ 已解决（阶段 4 第 3 步：`PlayerMotor` 补 `input` 自解析 + `PlayerMotor` / `PlayerCombat` 各加一条 `LogError`；教训：缺引用必须响亮报错，否则表现成"按键没反应"） |
-| `StaminaSystem` 的两个 `[ContextMenu]` 调试钩子（`Debug: 花 30 耐力` / `Debug: 回 40 耐力`）是临时脚手架 | 5（第 1 步接入真正的消耗者后删除） |
+| `StaminaSystem` 的两个 `[ContextMenu]` 调试钩子（`Debug: 花 30 耐力` / `Debug: 回 40 耐力`）是临时脚手架 | 5（留到阶段 5 收尾——第 2/3 步验"GP / 极限闪避成功回耐 30"时还要靠它造耐力，收尾时删除） |
 
 ## 7. 变更记录
+
+- **2026-10-13 · 阶段 5 第 1 步（普通防御 + 前方格挡盒）**
+  - 防御从"按状态无条件拦截"变成**几何判定**：`Player.prefab` 新增 `GuardBox` 子物体（Layer `Hurtbox`、trigger、前方 `z = 0.75 m`、`1.6 × 1.6 × 1.0 m`），挂在 Player 根下随 `yaw` 旋转 ⇒ 只有对方的攻击盒与它相交才算挡住，"武器挡武器"是看得见的事实
+  - `AttackHitbox` 改**两遍扫描**（先格挡盒 → `CombatResolver.ResolveGuard`，再身体；`blockedActors` 保证一刀只结算一个结果）；`Hurtbox` 加 `guardOnly` 标记与三色 Gizmos（橙 = 格挡盒 / 青 = 受击盒 / 洋红 = owner 未接线）
+  - `GuardSystem`：`blockStaminaCost = 10`、`blockHitStopFrames = 2`，`TryBlock` 靠 `StaminaSystem.TrySpend` 决定挡不挡得住 ⇒ "耐力耗尽就挡不住"是同一处代码，不用第二套逻辑
+  - 防御键在 `PlayerInputSource` 里用代码新建 `InputAction("Guard")`（右键 + 左 Shift），不动 `.inputactions` 资产；踩坑：`<Keyboarf>` 拼错会让 Input System 在 `Enable()` 时丢 binding，表现为"按键完全没反应"
+  - 排错教训：用户报"耐力没有扣除"，日志显示 `进入 Guard` 10 次但 `[GuardSystem]` 0 次、玩家只挨过一次打 ⇒ **格挡是几何相交，不是"按了键就掉耐"**；给 `ResolveGuard` 加了"有格挡盒却没有 `GuardSystem`"的响亮报错，避免同类静默失效
+  - 防御期间锁位移与转身（`PlayerMotor` 的 `canMove` 与 `Hit` / `Dead` 同规则）；防御中按攻击可立刻出招
+  - 验收：正面挡下扣 10 耐力、绕背挡不住、耐力光后挡不住（用户 2026-10-13 确认通过）；`dotnet build` 0 错误
 
 - **2026-10-13 · 阶段 5 第 0 步（`StaminaSystem` 耐力地基 + HUD 显示）**
   - 耐力从"路线图里的数字"变成可花可回的组件：`StaminaSystem`（`TrySpend` / `Restore` / `IsExhausted`），回复按逻辑帧算、消耗后停 30 帧
