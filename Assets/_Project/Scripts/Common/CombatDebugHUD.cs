@@ -103,9 +103,13 @@ public class CombatDebugHUD : MonoBehaviour
                 span  = (actor.LastHit != null) ? actor.LastHit.hitStunFrames : 0;
                 break;
             case CombatState.Guard:
-                phase = "GUARD   ";
-                span  = 0;
+            {
+                // 前 gpWindowFrames 帧是 GP 窗口（此刻挨刀会弹开攻方）
+                int gpWin = (actor.Guard != null) ? actor.Guard.GpWindowFrames : 0;
+                phase = (e < gpWin) ? "GP-WIN  " : "GUARD   ";
+                span  = gpWin;
                 break;
+            }
             case CombatState.Dead:
                 phase = "DEAD    ";
                 span  = 0;

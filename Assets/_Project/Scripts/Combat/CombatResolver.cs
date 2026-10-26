@@ -32,9 +32,23 @@ public static class CombatResolver//判定仲裁
             Debug.LogError($"[CombatResolver] {defender.name} 有格挡盒但没有 GuardSystem 组件 -> 格挡无效（检查 Prefab 上是否真的挂了这个组件）", defender);
             return false;
         }
-        if (!guard.TryBlock(attack)) return false;      // 没有处于防御态 / 耐力付不起 => 挡不住
+        // 三种结果分流：普通格挡只顿一下；GP 弹开还要打断攻方
+        switch (guard.TryBlock(attack))
+        {
+            case GuardResult.None:
+                return false;                                            // 没防御 / 耐力不够 => 照常挨打
 
-        CombatClock.RequestHitStop(guard.BlockHitStopFrames);   // 挡下的小顿帧
-        return true;                                            // 不调 ReceiveHit = 无伤害、无硬直
+            case GuardResult.Blocked:
+                CombatClock.RequestHitStop(guard.BlockHitStopFrames);    // 挡下的小顿帧
+                return true;                                             // 不调 ReceiveHit = 无伤害、无硬直
+
+            case GuardResult.GuardPoint:
+                attacker.EnterHitStun(attack);                           // 攻方按"自己这一招"的硬直帧数被打断
+                CombatClock.RequestHitStop(guard.GpHitStopFrames);       // GP 的顿帧比普通格挡长得多
+                return true;
+
+            default:
+                return false;
+        }
     }
 }

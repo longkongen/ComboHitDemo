@@ -94,4 +94,11 @@ public class CombatActor : MonoBehaviour
         SetState(CombatState.Hit);
         Debug.Log($"[CombatActor] {name} 进入硬直：{attack.attackName}（{attack.hitStunFrames} 帧）", this);
     }
+    public void EnterHitStun(AttackData source)
+    {
+        if (IsDead || source == null) return;
+        lastHit = source;
+        SetState(CombatState.Hit);
+        Debug.Log($"[CombatActor] {name} 被弹开：{source.attackName}（{source.hitStunFrames} 帧硬直）");
+    }
 }

@@ -1,7 +1,7 @@
 # ComboHitDemo · 开发路线图
 
 > 微高速动作 ACT Demo（Unity 6 / C#）：**连招 · GP · 极限闪避 · 相杀拼刀 · QTE 处决**
-> 最后更新：2026-10-13（阶段 4 连招系统完成；**阶段 5 防御三件套进行中** —— 第 0 步耐力地基 + 第 1 步普通防御（含前方格挡盒）已落地，下一步 GP 窗口 + 弹开）
+> 最后更新：2026-10-13（阶段 4 连招系统完成；**阶段 5 防御三件套进行中** —— 第 0 步耐力地基、第 1 步普通防御 + 前方格挡盒、第 2 步 GP 弹开已落地，下一步闪避位移 + 无敌帧）
 
 ---
 
@@ -187,7 +187,14 @@
   - 防御期间用 `PlayerMotor` 的 `canMove` 一起锁位移与转身（与 `Hit` / `Dead` 同一套规则）；防御中按攻击可立刻出招（不必先松手）
   - 踩坑记录：① 用户手写的 `AddBinding("<Keyboarf>/leftShift")` 拼错，Input System 会在 `Enable()` 时丢 binding ⇒ 右键防御整条失效；② "耐力没有扣除"的真因是**格挡盒没被扫到**（防御时木桩的刀都挥空了），不是扣耐力逻辑坏 —— 判定是几何相交，不是"按了键就掉耐"
   - 验收：正面按住右键 ⇒ 每挡一下 `STAM` −10 且 `HP` 不动、Console 出 `[GuardSystem]`；用鼠标把木桩转到背后仍按住右键 ⇒ **挡不住**、照常掉血进硬直；不按右键时橙框不参与判定；耐力花光后挡不住（用户 2026-10-13 确认通过）
-- ⬜ 第 2 步：GP 窗口 + 弹开（按被弹开招式给攻方硬直 + 双方顿帧 + 防守方回耐）
+- ✅ 第 2 步：GP 窗口 + 弹开
+  - **GP 窗口 = `Guard` 状态的前 8 帧**（`actor.StateFrames < gpWindowFrames`，进入那帧为 0 ⇒ 0..7 共 8 帧）；刻意**不引入 `CombatState.GuardPoint` 状态**：窗口只是同一个状态里的一段帧区间，独立状态会连带改 `ChangeState` / `PlayerMotor` / HUD / 分派四处，行为完全一样。`GuardPoint` 留给阶段 6 一闪
+  - `TryBlock` 返回类型从 `bool` 改成 `public enum GuardResult { None, Blocked, GuardPoint }`（三态：挡不住 / 普通格挡 / GP），`CombatResolver.ResolveGuard` 用 switch 分流
+  - GP 效果（决策 2A）：`attacker.EnterHitStun(attack)` 让攻方按**自己这一招**的 `hitStunFrames` 进硬直（只进硬直、不掉血、不击退）+ 全场 `gpHitStopFrames = 8` 的顿帧 + 防守方 `Restore(gpStaminaReward = 30)`（奖励回耐，**不扣**耐力）
+  - `CombatActor.EnterHitStun(AttackData)` 是本次新增的第二个"进硬直"入口：`ReceiveHit` = 扣血 + 击退 + 硬直，`EnterHitStun` = 只有硬直；两者都必须写 `lastHit`，否则 `TickHit` 读不到时长（硬直 0 帧，看起来像"弹开没生效"）
+  - HUD 在 `Guard` 阶段区分窗口内外：前 8 帧显示 `GP-WIN frame 0..7/8`，之后 `GUARD`
+  - 踩坑：用户把新旧两个 `TryBlock` 都留在文件里（只差返回类型）⇒ `CS0111` 重复成员 + 调用点 `CS0121` 歧义；"只有返回类型不同"不能当重载用，必须替换而不是新增
+  - 验收：窗口内挨刀 ⇒ `GP 弹开`、STAM +30、木桩 `HIT` 被打断 + 长顿帧；窗口外 ⇒ `挡下`、STAM −10、木桩继续挥；GP 后立刻反击能命中（用户 2026-10-13 确认通过）
 - ⬜ 第 3 步：闪避位移 + 无敌帧（`DodgeSystem`）
 - ⬜ 第 4 步：极限闪避（`PerfectDodge` + 回耐 + 长顿帧 + HUD 提示）
 
@@ -259,6 +266,14 @@
 | `StaminaSystem` 的两个 `[ContextMenu]` 调试钩子（`Debug: 花 30 耐力` / `Debug: 回 40 耐力`）是临时脚手架 | 5（留到阶段 5 收尾——第 2/3 步验"GP / 极限闪避成功回耐 30"时还要靠它造耐力，收尾时删除） |
 
 ## 7. 变更记录
+
+- **2026-10-13 · 阶段 5 第 2 步（GP 窗口 + 弹开）**
+  - GP 用"`Guard` 状态的前 8 帧"表达（`StateFrames < gpWindowFrames`），不新增状态；`GuardPoint` 枚举值留给阶段 6 一闪
+  - `GuardSystem.TryBlock` 返回 `GuardResult`（`None` / `Blocked` / `GuardPoint`）：窗口内 = 回 30 耐力 + 弹开攻方，窗口外 = 扣 10 耐力 + 普通格挡
+  - GP 弹开时 `CombatActor.EnterHitStun(attack)` 只让攻方进硬直（不扣血、不击退），硬直时长取攻方"自己这一招"的 `hitStunFrames` —— 用重招砸 GP 的人被弹得更久，规则自洽
+  - 长顿帧 `gpHitStopFrames = 8`（≈133 ms）对比普通格挡的 2 帧，打击反馈的差别靠顿帧长度直接体现
+  - 踩坑：`TryBlock` 两版并存（只差返回类型）→ `CS0111` + `CS0121`；同名不同返回类型不是重载
+  - 验收：窗口内 `GP 弹开` + STAM +30 + 木桩 `HIT`；窗口外 `挡下` −10 且木桩继续挥；GP 后反击命中（用户确认通过）
 
 - **2026-10-13 · 阶段 5 第 1 步（普通防御 + 前方格挡盒）**
   - 防御从"按状态无条件拦截"变成**几何判定**：`Player.prefab` 新增 `GuardBox` 子物体（Layer `Hurtbox`、trigger、前方 `z = 0.75 m`、`1.6 × 1.6 × 1.0 m`），挂在 Player 根下随 `yaw` 旋转 ⇒ 只有对方的攻击盒与它相交才算挡住，"武器挡武器"是看得见的事实
